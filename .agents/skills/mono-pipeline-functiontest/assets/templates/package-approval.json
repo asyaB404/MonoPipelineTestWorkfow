@@ -1,0 +1,9 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；功能：由当前 Agent 根据真实库存和明确完整交付确认形成的审核记录，不要求用户手写；参数：真实审核原 App/资源/热更范围、本次库存摘要和确认来源；默认未批准，不能自动接受，文件级确认不是业务验收。",
+  "schema": "mono-pipeline-package-approval/1",
+  "inventory_sha256": "UNCONFIRMED_INVENTORY_SHA256",
+  "accepted": false,
+  "complete_game_delivery": false,
+  "reviewer": "current_agent",
+  "statement": "UNCONFIRMED_COMPLETE_DELIVERY_REVIEW"
+}

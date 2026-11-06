@@ -1,0 +1,12 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；功能：完整静态包清单结构，不是构建结果；参数：由真实文件生成每项 path/bytes/sha256，不能手填完整，不复制运行时描述符。交付命令尚未实现。",
+  "schema": "mono-pipeline-package/1",
+  "backend": "mono",
+  "development": true,
+  "complete": false,
+  "exe": "APPROVED_PLAYER.exe",
+  "build_guid": "SET_EXPECTED_BUILD_GUID",
+  "unity_version": "SET_EXPECTED_UNITY_VERSION",
+  "platform": "WindowsPlayer",
+  "files": []
+}

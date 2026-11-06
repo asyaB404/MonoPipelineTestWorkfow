@@ -1,0 +1,14 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-05；更新人：Codex；功能：当前例的一次基础只读定位请求；参数：新命令/观察 ID、方法体、审阅、当前目标。相对脚本路径基于本请求文件；builtin 替代写法与完成轮询见 references/host-contract.md，说明不混入执行字段。",
+  "command_id": "NEW_READ_COMMAND_ID",
+  "observation_id": "NEW_OBSERVATION_ID",
+  "script": "./read-basic.cs",
+  "send": "eval_file",
+  "scope": "discovery",
+  "purpose": "before",
+  "target": "Unity.Runtime",
+  "read_only_review": "当前 Agent 已审阅：仅 Unity 基础属性读取，不调用业务/账号/GM/加载/阻塞代码",
+  "reason": "先取得当前实例事实再动态定位；不是预制动作映射",
+  "value_format": "json",
+  "covers_step": false
+}

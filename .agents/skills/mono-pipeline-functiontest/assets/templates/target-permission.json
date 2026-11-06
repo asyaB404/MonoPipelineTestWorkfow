@@ -1,0 +1,17 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；功能：由当前 Agent 根据真实唯一 EXE/PID、实际许可接受和用户授权形成的内部记录，不要求用户手写；参数：实际许可原文/摘要、包外证据/请求根，审核声明关联真实授权源文件/摘要；工具只读身份不连接 Player，默认未批准，不扩大权限。",
+  "schema": "mono-pipeline-target-permission/1",
+  "exe": "UNCONFIRMED_EXE",
+  "pid": 0,
+  "license": {
+    "path": "UNCONFIRMED_LICENSE_PATH",
+    "sha256": "UNCONFIRMED_LICENSE_SHA256",
+    "accepted": false,
+    "scope": "UNCONFIRMED_PERMISSION_SCOPE"
+  },
+  "permissions": [],
+  "evidence_roots": [],
+  "request_root": "UNCONFIRMED_EXTERNAL_REQUEST_ROOT",
+  "reviewer": "current_agent",
+  "statement": "UNCONFIRMED_EXPLICIT_PERMISSION_REVIEW"
+}

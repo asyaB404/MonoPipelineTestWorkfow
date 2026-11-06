@@ -1,0 +1,50 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-04；更新人：Codex；功能：原 run-suite 计划的单一格式示例；参数：真实原例、当前目标与独立预期必须替换示例值。仅保留 schema/defaults/cases，说明不混入执行字段；完整接口见 references/host-contract.md。defaults 只补缺失机械字段，不替代业务判断。",
+  "schema": "mono-pipeline-case-suite/1",
+  "defaults": {
+    "send": "eval_file",
+    "target": "CURRENT_TARGET",
+    "value_format": "json",
+    "read_only_review": "当前 Agent 已审核本批读取片段仅返回实际界面事实，无业务或账号副作用",
+    "reason": "依据本轮已验证的界面链路读取原例要求的事实"
+  },
+  "cases": [
+    {
+      "case_id": "ORIGINAL_CASE_ID",
+      "group_id": "display",
+      "steps": [
+        {"operation": "start-case", "request": {"case_id": "ORIGINAL_CASE_ID", "group_id": "display"}},
+        {
+          "operation": "observe",
+          "request": {
+            "command_id": "read-title",
+            "observation_id": "title",
+            "script": "./read-panel-title.cs",
+            "scope": "step",
+            "index": 1,
+            "original_text": "原步骤完整文本",
+            "purpose": "step",
+            "covers_step": true
+          }
+        },
+        {
+          "operation": "compare",
+          "request": {
+            "schema": "mono-pipeline-comparison/1",
+            "comparison_id": "expect-title",
+            "scope": "expected",
+            "index": 1,
+            "original_text": "原预期完整文本",
+            "step_indices": [1],
+            "observation_id": "title",
+            "rule": "text_equals",
+            "op": "eq",
+            "target": "/title_text",
+            "value": "需求或配置给出的完整标题"
+          }
+        },
+        {"operation": "final", "request": {"status": "passed"}}
+      ]
+    }
+  ]
+}

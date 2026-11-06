@@ -1,0 +1,82 @@
+FunctionTest报告转JSON说明
+
+一、作用
+本Skill负责把unity-functiontest生成的Markdown报告转换为日志中心需要的functiontest-upload.json，也支持运行目录转换、已有上传JSON校验、operation-only最小JSON生成和Cyou用量合并。
+
+本Skill不执行Unity测试，不调用上传脚本，不把普通测试用例JSON当作FunctionTest上报JSON。
+
+二、输入格式
+格式1：Markdown报告路径
+示例：
+/functiontest-report-json
+"Doc/AI开发文档/output/hero-list/hero-list-0002/hero-list-0002-unity-functiontest-report.md"
+
+格式2：运行目录路径
+示例：
+/functiontest-report-json
+"Doc/AI开发文档/output/hero-list/hero-list-0002"
+
+格式3：已有functiontest-upload.json路径。该模式只校验JSON并输出路径，不重新生成内容。
+
+报告和上传JSON的正式目录为：
+Doc/AI开发文档/output/{feature_id}/{run_dir}/
+
+项目组不在输入路径中填写。用户名和项目组优先从对应Cyou环境变量读取；变量为空、缺失或只有空白时，读取`../functiontest-workflow/config.json`中的同名字段；配置也不可用时写“无”。
+
+`CYOU_TEAM_ALIAS` 为空、缺失或只有空白时，JSON中 `project_group` 写“无”。
+
+三、输出文件
+默认JSON输出在Markdown报告同目录：
+{run_dir}-functiontest-upload.json
+
+显式使用--output时，输出JSON必须仍位于同一个run_dir，不能与输入Markdown报告使用同一路径。输出已存在时默认拒绝覆盖；只有用户明确要求复测、继续、修复或覆盖指定run_dir时，才允许使用--allow-overwrite。
+
+四、普通报告转换规则
+1.从Markdown报告解析passed、failed、blocked和test_inconclusive四种状态；旧报告只有三种状态时，缺少的test_inconclusive按0处理。
+2.必须解析“定位Bug数”和“修复问题数”；缺少任一统计时拒绝转换。
+3.四种状态数量必须与报告中的functional总数或用例总数一致；四种状态总数为0时拒绝转换。
+4.success_case_count、failure_case_count、block_case_count和invalid_case_count分别写入四种状态数量，invalid_case_count等于test_inconclusive数量，total_case_count等于四项之和。
+5.success_count和failure_count表示报告转换是否成功，不表示用例通过或失败。有效且非空的报告写success_count=1、failure_count=0；failed只写入failure_case_count，blocked只写入block_case_count，test_inconclusive只写入invalid_case_count。
+6.feature_count表示有效FunctionTest报告数量，普通报告转换固定为1，等于success_count加failure_count。
+7.时长优先读取当前业务根 Skill 的 skill_start、skill_end；三个 Cyou 时间环境变量完整存在时，只由根 Skill 扣除其时间范围内两个过滤量的变化值，环境变量缺失时使用完整本地 Skill 时间。Workflow 中的嵌套子 Skill 只展示自己的原始起止时间，不扣除环境变量，避免同一会话重复扣除。根 Skill 时间无效时，三个环境变量完整则使用会话总时间减两个过滤量，否则写0。不再读取 Markdown 中的“总耗时”，也不接受手工传入时长。
+8.fix_round_count只读取报告中的“自动修复轮次”字段；字段不存在时写0，转换阶段不重新扫描run-log。
+9.定位Bug数和修复问题数以报告中的真实统计为准，不接受通过转换命令手工覆盖。
+10.非空报告仍可生成并校验JSON；若blocked数量等于用例总数，或test_inconclusive数量等于用例总数，工作流保留本地报告和JSON并跳过上传；全passed、全failed及其他混合状态报告正常进入上传流程。`test_inconclusive`是正式状态名，`test_inclusive`不作为状态解析。
+
+五、用量合并
+上传前可执行轻量合并：
+python scripts/convert_functiontest_report.py --merge-cyou-spend "Doc/AI开发文档/output/{feature_id}/{run_dir}/{run_dir}-functiontest-upload.json"
+
+该模式直接读取已有upload JSON并原位更新，不重新解析Markdown报告。
+合并更新以下字段：
+tester_account <- CYOU_API_KEY_ALIAS，缺失时读取../functiontest-workflow/config.json的tester_account
+project_group <- CYOU_TEAM_ALIAS，缺失时读取../functiontest-workflow/config.json的project_group
+total_cost_usd <- CYOU_SESSION_SPEND_USD
+total_tokens <- CYOU_SESSION_TOTAL_TOKENS
+ai_model <- 显式--ai-model、已有JSON中的有效值或模型环境变量；全部不可用才写入“暂无数据”，禁止硬编码具体模型名
+
+合并时会移除未定义的顶层字段，校验或补齐operation_type，缺失时补齐feature_count，并重新校验JSON。total_cost_usd和total_tokens同时写入tool_stats_payload.custom_metrics和user_stats_payload.items[0].custom_metrics。
+
+会话耗时只在 Skill 时间无效且三个 Cyou 时间环境变量完整时作为回退值；脚本不能直接读取AI对话上下文，调用方可通过--ai-model传入当前模型，无法获取时写“暂无数据”。
+
+六、JSON结构校验
+JSON顶层字段必须严格等于tool_stats_payload和user_stats_payload。
+
+两组custom_metrics必须严格符合：
+UnityFunctionTest_report_schema.yaml
+
+生成或合并后会重新解析JSON并校验顶层字段、custom_metrics字段、四种用例数量之和、耗时字段和operation_type；校验失败时停止后续上传。
+
+七、重要限制
+普通测试用例JSON不能直接转换；已有upload JSON可以只做校验，operation-only模式不需要Markdown，普通Unity测试必须先用functiontest-workflow或unity-functiontest生成Markdown报告。
+上传JSON请使用functiontest-json-upload。
+完整测试加转换加上传请使用functiontest-workflow。
+
+八、操作类型与单独Skill上报
+正常主动测试工作流固定为“主动测试工作流”。单独调用 testcase-gen、testcase-mcp-complete、ui-quick-reference 时，使用 operation-only 模式生成 JSON，操作类型分别为“本地生成用例”“质量部生成用例”“UI快速分析”，测试统计全部为 0，仅写入 Token 和消耗数据后上传。
+operation-only JSON默认输出在：
+Doc/AI开发文档/output/{feature_id}/{feature_id}-operation-{seq4}/{feature_id}-operation-{seq4}-functiontest-upload.json
+
+operation-only不读取Markdown报告，必须显式传入--output，允许的操作类型为“主动测试工作流”“质量部生成用例”“本地生成用例”“UI快速分析”；测试统计全部为0，同时写入operation_type、tester_account、project_group、ai_model、total_cost_usd和total_tokens。独立Unity功能测试禁止使用operation-only。
+
+单独执行 unity-functiontest 时固定为“独立Unity功能测试”，必须基于本轮 Markdown 报告转换 JSON，保留真实测试统计后再合并用量，再由上传器按全量用例状态门禁决定是否上传，不得使用 operation-only 模式。

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test Case Generator"
+  short_description: "Read requirement docs → generate test points → evaluate → test cases → Excel export"
+  default_prompt: "Generate test cases from this requirement document"

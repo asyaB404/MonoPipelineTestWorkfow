@@ -1,0 +1,196 @@
+# Unity FunctionTest 日志上报 schema
+#
+# 页面展示口径：
+#   - 工具名称显示为“Unity功能测试”，对应 AI 主动测试工具。
+#   - 用户详情筛选只保留“测试人名称”和“项目组名称”。
+#   - IP地址、测试功能名字作为明细列展示，不作为筛选项。
+#   - 测试耗时使用“秒”，接口 stats.duration_ms 仍按固定字段传毫秒。
+#   - 花费拆分为“总花费(USD)”和“Token”两个字段。
+#   - 用例统计包含 success/failed/blocked/test_inconclusive 四项；总用例数必须等于四项之和。
+#   - operation_type 使用固定中文枚举：主动测试工作流、质量部生成用例、本地生成用例、UI快速分析、独立Unity功能测试。
+
+tool_code: "UnityFunctionTest"
+name: "AI主动测试工具"
+
+tool_metrics:
+  test_run_count:
+    type: int
+    label: "测试总次数"
+    aggregate: sum
+    display: number
+
+  report_success_count:
+    type: int
+    label: "成功生成报告数"
+    aggregate: sum
+    display: number
+
+  report_failure_count:
+    type: int
+    label: "失败生成报告数"
+    aggregate: sum
+    display: number
+
+  bug_count:
+    type: int
+    label: "定位Bug数"
+    aggregate: sum
+    display: number
+
+  fixed_issue_count:
+    type: int
+    label: "修复问题数"
+    aggregate: sum
+    display: number
+
+  fix_round_count:
+    type: int
+    label: "修复轮次"
+    aggregate: sum
+    display: number
+
+  total_duration_seconds:
+    type: float
+    label: "总耗时(秒)"
+    aggregate: sum
+    display: number
+
+  total_cost_usd:
+    type: float
+    label: "总花费(USD)"
+    aggregate: sum
+    display: number
+
+  total_tokens:
+    type: int
+    label: "Token"
+    aggregate: sum
+    display: number
+
+user_metrics:
+  tester_account:
+    type: string
+    label: "用户名"
+    aggregate: latest
+    display: text
+    identity: true
+    identity_group: functiontest_record
+    filterable: true
+
+  project_group:
+    type: string
+    label: "项目"
+    aggregate: latest
+    display: text
+    identity: true
+    identity_group: functiontest_record
+    filterable: true
+
+  operation_type:
+    type: string
+    label: "操作类型"
+    aggregate: latest
+    display: text
+
+  client_ip:
+    type: string
+    label: "IP地址"
+    aggregate: latest
+    display: text
+
+  feature_count:
+    type: int
+    label: "功能数量"
+    aggregate: sum
+    display: number
+
+  feature_name:
+    type: string
+    label: "功能名"
+    aggregate: latest
+    display: text
+    identity: true
+
+  test_duration_seconds:
+    type: float
+    label: "总耗时(秒)"
+    aggregate: sum
+    display: number
+
+  success_case_count:
+    type: int
+    label: "成功用例数量"
+    aggregate: sum
+    display: number
+
+  failure_case_count:
+    type: int
+    label: "失败用例数量"
+    aggregate: sum
+    display: number
+
+  block_case_count:
+    type: int
+    label: "阻塞用例数量"
+    aggregate: sum
+    display: number
+
+  invalid_case_count:
+    type: int
+    label: "无效用例数量"
+    aggregate: sum
+    display: number
+
+  total_case_count:
+    type: int
+    label: "总用例数量"
+    aggregate: sum
+    display: number
+
+  bug_count:
+    type: int
+    label: "定位Bug数"
+    aggregate: sum
+    display: number
+
+  fixed_issue_count:
+    type: int
+    label: "修复问题数"
+    aggregate: sum
+    display: number
+
+  fix_round_count:
+    type: int
+    label: "修复轮次"
+    aggregate: sum
+    display: number
+
+  success_count:
+    type: int
+    label: "成功次数"
+    aggregate: sum
+    display: number
+
+  failure_count:
+    type: int
+    label: "失败次数"
+    aggregate: sum
+    display: number
+
+  total_cost_usd:
+    type: float
+    label: "总花费(USD)"
+    aggregate: sum
+    display: number
+
+  total_tokens:
+    type: int
+    label: "Token"
+    aggregate: sum
+    display: number
+
+  ai_model:
+    type: string
+    label: "AI模型"
+    aggregate: latest
+    display: text

@@ -1,0 +1,22 @@
+{
+    "name": "Unity.Pipeline.IlInterpreter",
+    "rootNamespace": "",
+    "references": [],
+    "includePlatforms": [
+        "Editor",
+        "WindowsStandalone64"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "_comment": "overrideReferences 必须为 true 并显式列出 System.Reflection.Metadata 系列：Editor 编译靠 Any 平台插件自动引用可过，但 Player 构建时 csc 命令行不会带上它们，会整片报 CS0246（MetadataReader/PEReader/ILOpCode）。",
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "System.Reflection.Metadata.dll",
+        "System.Collections.Immutable.dll",
+        "System.Runtime.CompilerServices.Unsafe.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

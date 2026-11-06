@@ -1,0 +1,16 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-05；更新人：Codex；功能：一次真实按钮动作的现场请求，不可直接执行；参数：原步骤、最新 builtin:buttons 的实际完整节点路径、本例 before/守卫及许可。其他动作可删除 builtin/builtin_options，改用已审阅 script 方法体，两者互斥。",
+  "command_id": "NEW_ACTION_COMMAND_ID",
+  "builtin": "click_button",
+  "builtin_options": {"path": "CURRENT_FULL_BUTTON_PATH"},
+  "send": "eval_file",
+  "scope": "step",
+  "index": 1,
+  "original_text": "原第 1 步完整文本",
+  "target": "CURRENT_VERIFIED_SELECTOR",
+  "before_observation_id": "CURRENT_BEFORE_ID",
+  "guard_comparison_ids": ["CURRENT_UNIQUE_GUARD_ID", "CURRENT_ENABLED_GUARD_ID"],
+  "target_review": "当前 Agent 根据本例最新实际观察核对唯一类型/节点/版本和业务可操作值",
+  "reason": "原步骤与许可范围内只触发一次，随后必须宿主新帧独立读取比较",
+  "value_format": "json"
+}

@@ -1,0 +1,48 @@
+FunctionTestJSON上传说明
+
+一、作用
+本Skill只负责读取、校验并上传已经生成好的functiontest-upload.json。
+本Skill不执行Unity测试、不解析Markdown、不生成JSON。上传前会在内存中处理账号和项目组空值，不回写本地JSON文件。
+
+二、输入格式
+调用方先确认当前轮次的上传 JSON，正式路径为：
+Doc/AI开发文档/output/{feature_id}/{run_dir}/{run_dir}-functiontest-upload.json
+
+不得从input目录、feature根目录或历史output目录猜测JSON路径。进入该 JSON 所在 run_dir 后，固定生成 wrapper 并上传；命令行不传 JSON 路径。
+
+三、脚本位置
+scripts/report_functiontest.bat
+scripts/report_functiontest.ps1
+scripts/prepare_upload_wrapper.py
+
+四、重要限制
+输入必须是已生成的上传JSON。
+JSON顶层字段必须严格等于tool_stats_payload和user_stats_payload。
+普通测试用例JSON不能上传。
+Markdown报告和运行目录不能直接传给本Skill。
+需要从报告生成JSON时，请使用functiontest-report-json。
+需要完整测试加转换加上传时，请使用functiontest-workflow。
+
+上传器只校验文件、路径结构和顶层字段，不校验两组custom_metrics的完整schema；完整schema校验由functiontest-report-json完成。
+单独Skill生成的operation-only JSON也可上传，但固定operation_type由functiontest-report-json生成和校验，上传器本身不单独校验operation_type枚举。
+上传前会检查用例统计：当total_case_count大于0且block_case_count等于总数，或invalid_case_count（对应test_inconclusive）等于总数时，拒绝发送请求，保留本地报告和JSON；total_case_count为0的operation-only JSON不受此门禁影响。
+
+在当前 run_dir 中执行 `prepare_upload_wrapper.py --run-dir .`；它只接受唯一的 `*-functiontest-upload.json`，生成 UTF-8 BOM 的 `functiontest-upload-wrapper.ps1`。随后不带参数执行 `report_functiontest.bat`。禁止手写临时 ps1、使用 `-Command` 内联脚本，或把中文 JSON 路径放进命令行。
+
+五、发送前处理
+如果user_stats_payload.items中的tester_account或project_group为空、为空白、等于“未填写”、等于“未输入”或以“TODO”开头，脚本只在内存中将其改为“无”。本地JSON文件内容不会被回写修改。
+
+六、上传服务器和请求
+上传服务器优先使用脚本参数；固定 wrapper 调用时，从本 Skill 的 `scripts/upload-endpoint.json` 显式 UTF-8 读取。上传流程不读取环境变量。
+
+脚本按顺序发送两个POST请求：
+1.{服务器}/api/v1/tool-stats/report，提交tool_stats_payload。
+2.{服务器}/api/v1/tool-user-stats/report，提交user_stats_payload。
+
+两次请求按顺序执行，不自动重试。第一次请求失败时不会继续发送第二次请求。
+
+七、本地演练
+调用固定 ps1 时传入 `-DryRun`，只输出待发送的tool_stats_payload和user_stats_payload，不访问服务器；未传入时执行实际上传。
+
+八、失败处理
+上传失败时保留本地原始JSON，并反馈脚本返回的错误原文。上传脚本不会解析Markdown、读取run-log或生成摘要。

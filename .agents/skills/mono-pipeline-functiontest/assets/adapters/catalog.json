@@ -1,0 +1,10 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；功能：仅同包明确登记的可选项目接线成员；基础参数：路径同时受完整交付清单摘要保护，公共宿主不内置项目名或自动加载适配。",
+  "schema": "mono-pipeline-adaptation-catalog/1",
+  "files": [
+    "assets/adapters/GameClient/README.md",
+    "assets/adapters/GameClient/GlobalMonoPipelineGameClientBuild.cs",
+    "assets/adapters/GameClient/GlobalMonoPipelineGameClientBuild.cs.meta",
+    "assets/adapters/GameClient/framework-overloads.patch"
+  ]
+}

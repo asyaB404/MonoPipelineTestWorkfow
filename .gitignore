@@ -1,0 +1,18 @@
+# Created: 2026-11-06; Author: Codex. Exclude local execution and credentials.
+__pycache__/
+*.py[cod]
+.venv/
+.agents/tmp/
+Library/
+Temp/
+Logs/
+UserSettings/
+Doc/AI开发文档/input/
+Doc/AI开发文档/output/
+Doc/AI中间产物/
+.env
+.env.*
+.unity-pipeline-runtime-port
+target-permission.local.json
+target.local.json
+*.log

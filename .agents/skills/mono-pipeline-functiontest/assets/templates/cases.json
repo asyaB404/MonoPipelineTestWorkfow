@@ -1,0 +1,13 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；功能：由当前 Agent 全量整理原始用例的内部结构示例，不含动作映射，不要求用户手写 JSON；参数：全部原编号、步骤/预期及附加字段保留；原无编号时明确注明派生，不将模板示例作为真实用例。",
+  "cases": [
+    {
+      "case_id": "ORIGINAL_CASE_ID",
+      "title": "原用例标题",
+      "preconditions": ["原前置完整文本"],
+      "steps": ["原步骤完整文本"],
+      "expected": ["原预期完整文本"],
+      "source_metadata": {"keep_all_original_fields": true}
+    }
+  ]
+}

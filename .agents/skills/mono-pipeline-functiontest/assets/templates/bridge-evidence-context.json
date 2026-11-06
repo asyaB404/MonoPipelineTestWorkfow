@@ -1,0 +1,13 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；功能：公共 Unity 证据 DTO 的明确上下文；参数：当前实际 run/case/观察 command/build、包外证据根与独立截图/日志权限；截图请求和后续查询各用真实命令，默认未批准/未公开审阅。",
+  "run_id": "UNCONFIRMED_RUN_ID",
+  "case_id": "UNCONFIRMED_CASE_ID",
+  "command_id": "UNCONFIRMED_CURRENT_COMMAND_ID",
+  "build_guid": "UNCONFIRMED_ACTUAL_BUILD_GUID",
+  "evidence_root": "UNCONFIRMED_EXTERNAL_EVIDENCE_ROOT",
+  "permission_granted": false,
+  "permission": "UNCONFIRMED_SCREENSHOT_OR_LOG_READ",
+  "public_reviewed": false,
+  "reviewer": "current_agent",
+  "review_statement": "UNCONFIRMED_ACTUAL_PRIVACY_REVIEW"
+}

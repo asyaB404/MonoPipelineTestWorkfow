@@ -1,0 +1,23 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；功能：明确单目标配置的未授权模板，不可直接执行；参数：当前 Agent 必须用真实批准的包、PID 创建时间、端口、构建/版本、许可与证据根替换，不含令牌。",
+  "schema": "mono-pipeline-target/1",
+  "exe": "./APPROVED_PLAYER.exe",
+  "pid": 0,
+  "port": 0,
+  "process_created_utc": "SET_REAL_PROCESS_CREATED_UTC",
+  "build_guid": "SET_EXPECTED_BUILD_GUID",
+  "unity_version": "SET_EXPECTED_UNITY_VERSION",
+  "platform": "WindowsPlayer",
+  "package_manifest": "./package-manifest.json",
+  "license": {
+    "path": "./approved-license.txt",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "accepted": false,
+    "scope": "用户明确授权范围；不得自动批准"
+  },
+  "permissions": [],
+  "evidence_roots": ["./approved-artifacts"],
+  "limits": {},
+  "_integrity_mode_hint": "full=逐成员核验全包 sha256；identity_only=只验 EXE 路径/PID 创建时间/build_guid/端口独占，跳过包内文件字节比对。本机快速测试可用 identity_only，须由操作者显式选择。",
+  "integrity_mode": "full"
+}

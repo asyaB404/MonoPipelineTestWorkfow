@@ -1,0 +1,12 @@
+# 创建日期：2026-10-26；作者：Cyou；功能：构建辅助 Unity 元数据；参数：固定源 GUID，接入保留。
+fileFormatVersion: 2
+guid: 1329556a7b174ed9afc3b52b8bfbcbab
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData:
+  assetBundleName:
+  assetBundleVariant:

@@ -1,0 +1,16 @@
+{
+  "_comment": "创建日期：2026-10-26；作者：Cyou；功能：由当前 Agent 全量整理 Markdown/办公文档后的原来源关联，不要求用户手写，不调用模型服务；参数：全部原路径/真实原字节摘要/完整原编号顺序和实际审阅声明；默认未确认，模板不是原始来源。",
+  "schema": "mono-pipeline-provenance/1",
+  "sources": [
+    {
+      "path": "./ORIGINAL_SOURCE_DOCUMENT.docx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "review": {
+    "reviewer": "current_agent",
+    "complete": false,
+    "case_ids": ["ORIGINAL_CASE_ID"],
+    "statement": "必须实际全量审核原文、原编号、全部步骤/预期，不截断、不重编号"
+  }
+}

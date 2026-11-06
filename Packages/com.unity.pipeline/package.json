@@ -1,0 +1,25 @@
+{
+  "name": "com.unity.pipeline",
+  "displayName": "Unity Pipeline",
+  "version": "0.6.0-exp.1-unity2022",
+  "unity": "2022.3",
+  "category": "Pipeline",
+  "description": "This package allows application (cli, agent or other) to connect to the editor or a running game and execute commands.",
+  "keywords": ["pipeline", "connected", "authoring", "hotreload"],
+  "dependencies": {
+    "com.unity.test-framework": "1.1.33",
+    "com.unity.modules.jsonserialize": "1.0.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.2",
+    "com.unity.nuget.mono-cecil": "1.11.5",
+    "com.unity.modules.uielements": "1.0.0",
+    "com.unity.modules.screencapture": "1.0.0"
+  },
+  "samples": [
+    {
+      "displayName": "Hot Reload Examples",
+      "description": "In-place hot reload examples.",
+      "path": "Samples~/HotReload"
+    }
+  ],
+  "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.pipeline@0.6/manual/index.html"
+}

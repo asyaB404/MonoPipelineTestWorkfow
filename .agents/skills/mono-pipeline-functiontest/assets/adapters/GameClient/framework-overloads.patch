@@ -1,0 +1,108 @@
+# 创建日期：2026-10-26；作者：Cyou。
+# 功能：当前 GameClient 适配器所需的原管线三处重载和菜单分组增量；参数：匹配当前基线后人工批准合并，不自动覆盖不同框架/业务改动。
+--- a/Assets/Scripts/GameFramework/Editor/Build/BuildPipelineX.cs
++++ b/Assets/Scripts/GameFramework/Editor/Build/BuildPipelineX.cs
+@@ -191,6 +191,37 @@
+             PlatformType platformType, BuildModeType modeType, SDKType sdkType, BuildProfilerType profilerType,
+             ScriptingImplementation? scriptingBackend = null)
+     {
++        BuildOption option = PrepareProfilerBuildOption(outPath, buildType, configureType, platformType,
++            modeType, sdkType, profilerType, scriptingBackend);
++        BuildAppPipeline.Build(option);
++    }
++
++    /// <summary>
++    /// 创建时间：2026-10-26；创建人：Cyou。
++    /// 功能：使用明确的平台构建器接入原 App/资源管线，并返回真实构建结果；默认入口不改变。
++    /// 参数：原构建参数、明确后端和平台构建器工厂；工厂只用于本次调用，不注册全局替代项。
++    /// </summary>
++    public static AppBuilderResult BuildAppWithProfiler(string outPath, BuildType buildType, ConfigureType configureType,
++        PlatformType platformType, BuildModeType modeType, SDKType sdkType, BuildProfilerType profilerType,
++        ScriptingImplementation? scriptingBackend, Func<BuildOption, IAppBuilderPlatform> platformFactory)
++    {
++        if (platformFactory == null) throw new ArgumentNullException("platformFactory");
++        BuildOption option = PrepareProfilerBuildOption(outPath, buildType, configureType, platformType,
++            modeType, sdkType, profilerType, scriptingBackend);
++        IAppBuilderPlatform platform = platformFactory(option);
++        if (platform == null) throw new FrameworkException("[Build] explicit platform builder is missing.");
++        return BuildAppPipeline.Build(option, platform);
++    }
++
++    /// <summary>
++    /// 创建时间：2026-10-26；创建人：Cyou。
++    /// 功能：共享原平台核验、构建参数、版本与宏准备，避免新旧入口复制两套流程。
++    /// 参数：原构建参数和可选后端；返回原管线实际使用的 BuildOption，不执行构建。
++    /// </summary>
++    private static BuildOption PrepareProfilerBuildOption(string outPath, BuildType buildType, ConfigureType configureType,
++        PlatformType platformType, BuildModeType modeType, SDKType sdkType, BuildProfilerType profilerType,
++        ScriptingImplementation? scriptingBackend)
++    {
+         if (!GameFrameworkEditor.EditorUtility.IsPlatformTypeTarget(platformType))
+         {
+             // 批处理下不可弹窗阻塞，直接抛错由上层捕获退出。
+@@ -207,7 +238,7 @@
+         PlatformConfig platformConfig = UpdateBuildConfig(option);
+         platformConfig.Save(option.PlatformVerFilePath);
+ 
+-        BuildAppPipeline.Build(option);
++        return option;
+     }
+ 
+     /// <summary>
+--- a/Assets/Scripts/GameFramework/Editor/Build/App/BuildAppPipeline.cs
++++ b/Assets/Scripts/GameFramework/Editor/Build/App/BuildAppPipeline.cs
+@@ -22,4 +22,14 @@
+     {
+         AppBuilder.Build(option);
+     }
++
++    /// <summary>
++    /// 创建时间：2026-10-26；创建人：Cyou。
++    /// 功能：将明确的平台构建器接到原 App/资源生命周期并返回真实结果，不改默认工厂。
++    /// 参数：option 为原构建参数，platform 为本次调用独享的平台构建器。
++    /// </summary>
++    public static AppBuilderResult Build(BuildOption option, IAppBuilderPlatform platform)
++    {
++        return AppBuilder.Build(option, platform);
++    }
+ }
+--- a/Assets/Scripts/GameFramework/Editor/Build/App/Builder/AppBuilder.cs
++++ b/Assets/Scripts/GameFramework/Editor/Build/App/Builder/AppBuilder.cs
+@@ -65,6 +65,25 @@
+         }
+ 
+         /// <summary>
++        /// 创建时间：2026-10-26；创建人：Cyou。
++        /// 功能：使用本次明确的平台构建器执行原完整 App/资源生命周期，返回实际构建结果。
++        /// 参数：option 为原构建参数，platform 为本次平台实例；不注册或修改全局构建器工厂。
++        /// </summary>
++        public static AppBuilderResult Build(BuildOption option, IAppBuilderPlatform platform)
++        {
++            if (option == null) throw new ArgumentNullException("option");
++            if (platform == null) throw new ArgumentNullException("platform");
++            if (option.ChannelType == ChannelType.Invalid)
++                throw new FrameworkException("[Build] explicit app channel is invalid.");
++            AppBuilder app = new AppBuilder(option, platform);
++            app.Build();
++            AppBuilderResult result = app.m_Result;
++            if (result == null || !result.IsSuccess || result.Report == null)
++                throw new FrameworkException("[Build] explicit app builder did not return a successful report.");
++            return result;
++        }
++
++        /// <summary>
+         /// 构建前事件。
+         /// </summary>
+         protected override bool OnPreBuild()
+--- a/Assets/Editor/Core/MenuPriorityConst.cs
++++ b/Assets/Editor/Core/MenuPriorityConst.cs
+@@ -194,6 +194,9 @@
+         UpdateResEditorTesterHelper,        // Game Tools/打包/Editor模式资源更新测试
+ 
+         Max,
++
++        // 创建日期：2026-10-26；作者：Cyou。新 Mono/Pipeline 菜单共享原测试构建分组，保留全部旧枚举值。
++        BuildAppWindowMonoPipeline = BuildAppWindowTestAgent,
+     }
+ 
+     /// <summary>
