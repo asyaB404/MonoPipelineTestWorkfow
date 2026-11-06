@@ -5,7 +5,7 @@ description: 为 functiontest-workflow 提供已构建 Windows Mono Development 
 
 # Mono Pipeline 功能测试
 
-<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-05；更新人：Codex；功能：父流程协作与直接调用的 PC 包测试入口；参数：完整原用例、包目标、授权、输出根及已有父上下文。当前精简与复用适配归属 Codex，历史实现与建议归属 CyouCode；父 Workflow 保持原样。 -->
+<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-06；更新人：Codex；功能：父流程协作与直接调用的 PC 包测试入口；参数：完整原用例、包目标、授权、输出根及已有父上下文。本次30秒启动预算和固定登录精简归属Codex，历史实现与建议归属CyouCode；父Workflow保持原样。 -->
 
 宿主 = 包外 Python 执行工具；Player = 已构建的 Unity 游戏进程；journal = 本轮不可变证据记录。仅支持 Mono Development，不证明 IL2CPP、AOT、裁剪或热更兼容。
 
@@ -22,7 +22,7 @@ description: 为 functiontest-workflow 提供已构建 Windows Mono Development 
 ## 阶段 2：准备与附加
 
 1. 从本技能根运行 [mono-pipeline-test.bat](mono-pipeline-test.bat) 或 Python 3.10+ 的 [scripts/cli.py](scripts/cli.py)，先核对交付清单。Agent 常规调用在子命令前加 `--compact`，保留末样本与证据，减少重复输出；普通使用不刷新清单。内部准备见[交付契约](references/delivery-contract.md)。
-2. 实际执行先查明确 EXE 是否已运行：存在则复用，否则由当前 Agent 自主启动 Player，不再要求用户手动启动。按确认的工作目录/测试开关启动，就绪只读轮询默认总预算 120 秒；失败停止，不杀死、不重启、不启动第二实例。仅离线准备时不启动、不附加、不生成冒充测试完成的正式报告。
+2. 实际执行先查明确 EXE 是否已运行：存在则复用，否则由当前 Agent 自主启动 Player，不再要求用户手动启动。按确认的工作目录/测试开关启动，就绪只读轮询默认总预算30秒：立即检查，就绪即继续，不固定休眠、不自动延长；用户明确指定预算时沿用。失败停止，不杀死、不重启、不启动第二实例。此预算仅供启动就绪检查，不改连接或业务动作超时。仅离线准备时不启动、不附加、不生成冒充测试完成的正式报告。
 3. `output-check` 后 `init`，使用返回的新本轮根 `attach`。已有父上下文时传实际 `--workflow-timing`、`--workflow-parent-id`、`--workflow-child-id`，使用同一功能前缀 `--run-prefix`，不重建父；直接调用使用自身计时。父流程中的编辑器编译/PlayMode/测试执行由本技能的 PC 链路承接，其他公共阶段按需复用；见协作契约。静态准备或启动成功不等于附加成功。
 
 不伪造 PID/描述符，不自造许可证，不默认接受或扩大权限；内部迁移许可不等于运行或账号操作授权。附加、脚本读取、业务/准备动作、日志及截图分别按真实许可执行；登录、账号选择或资源构造不自动授权。令牌仅在内存认证头使用，不写命令行、报告或交付；不外挂保活或默认关闭自检。
@@ -30,6 +30,8 @@ description: 为 functiontest-workflow 提供已构建 Windows Mono Development 
 ## 阶段 3：正常执行路径
 
 先读附加返回的 `discovery` 选择与现场一致的准备来源，再 `chain-start`、首次 `builtin:chain`、必要准备与独立比较、`chain-end`。初态不证明就绪，准备不计业务例、不代替前置。按钮优先用 `builtin:buttons` → 原 `action` 的 `builtin:click_button`，绑定实际节点及实例；守卫与动作后新帧不变，见[宿主契约](references/host-contract.md)。
+
+同框架登录直接采用[固定登录流程](references/login-navigation.md)：普通按钮路径为`GameEntry/Builtin/UI/AdapterArea/Canvas0/UI_LoginGame/LoginBtns/LoginButton`，不重复探查协议、账号、SDK和主界面。按已有登录授权核验该按钮并点击一次，新帧确认激活登录页消失即完成登录准备；目标业务页面仍按原用例检查，不额外绑为登录成功条件。
 
 | 操作 | 使用方式 |
 | --- | --- |
@@ -69,7 +71,7 @@ description: 为 functiontest-workflow 提供已构建 Windows Mono Development 
 | 命令、计划、比较、共享链路与完成等待 | [host-contract.md](references/host-contract.md) |
 | 公共 Unity API、反射、日志/截图 | [bridge-contract.md](references/bridge-contract.md)、[read-basic.cs](assets/templates/read-basic.cs) |
 | 离线交付、构建库存、首次接入 | [delivery-contract.md](references/delivery-contract.md)、[internal-license.md](references/internal-license.md) |
-| 项目适配或同框架登录候选 | [GameClient 接线](assets/adapters/GameClient/README.md)、[登录参考](references/login-navigation.md)，路径使用前重新核验 |
+| 项目适配或同框架固定登录 | [GameClient 接线](assets/adapters/GameClient/README.md)、[固定登录流程](references/login-navigation.md)，不重新发现已约定路径 |
 | 修改宿主后的隔离验证 | [isolation-tests.md](references/isolation-tests.md) |
 
 首次接入的批准/备份见交付契约。离线检查不代替公司 CyouCode 实机验收，不承诺通过数或耗时。

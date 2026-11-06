@@ -1,26 +1,26 @@
-# 同框架登录候选
+# 同框架固定登录
 
-<!-- 创建日期：2026-11-02；作者：Cyou；更新日期：2026-11-05；更新人：Codex；功能：保留 CyouCode 历史核验过的登录候选，删除跨项目通用化和过期判定说明；参数：当前真实节点、明确 setup 授权及动作后新帧。不包含账号或凭据，不自动登录。 -->
+<!-- 创建日期：2026-11-02；作者：Cyou；更新日期：2026-11-06；更新人：Codex；功能：按用户确认的中台固定路径完成登录准备；参数：已有登录授权、真实按钮实例及动作后新帧。固定登录精简建议归属Codex，原模板归属CyouCode；不包含账号或凭据。 -->
 
-仅在目标采用相同 GameFramework 登录结构且确需准备登录时使用。这些是历史定位候选，不保证其他项目、当前构建或重建界面的路径/状态相同；先 `builtin:chain/subtree/buttons` 核验现场，不把固定路径当已验证事实。
+仅用于采用本中台登录结构的目标。用户已确认以下固定入口，不再把它当候选重新扫描，不推导协议、账号、SDK或主界面的通用登录方案；其他框架不自动套用。
 
-## 候选与模板
+## 固定入口
 
-| 目标 | 历史路径（共同前缀 `GameEntry/Builtin/UI/AdapterArea/`） |
+| 目标 | 固定完整路径 |
 | --- | --- |
-| 登录页 | `Canvas0/UI_LoginGame` |
-| 普通登录按钮 | `Canvas0/UI_LoginGame/LoginBtns/LoginButton` |
-| 协议开关 | `Canvas0/UI_LoginGame/AgreementToggle` |
-| 账号输入 | `Canvas0/UI_LoginGame/InputAccount/InputAccount` |
-| SDK 登录组 | `Canvas0/UI_LoginGame/SdkLoginBtns` |
-| 主界面 | `Canvas0/UI_Main` |
+| 登录页 | `GameEntry/Builtin/UI/AdapterArea/Canvas0/UI_LoginGame` |
+| 普通登录按钮 | `GameEntry/Builtin/UI/AdapterArea/Canvas0/UI_LoginGame/LoginBtns/LoginButton` |
 
-[read-login-state.cs](../assets/templates/read-login-state.cs) 仅返回候选登录页/按钮/SDK 组/协议/主界面状态与帧；[click-login.cs](../assets/templates/click-login.cs) 对固定候选 `GameButton` 调用一次 `InvokeOnClickListener()`。两份模板有历史使用记录，保留原字节；只有路径、控件和授权均核验后才可使用。目标不同就在本轮新文件中按真实入口编写，不改旧模板或已登记来源。
+## 执行顺序
 
-## 当前使用规则
+1. 复用附加`discovery`选路并照常登记准备链路，首个观察仍为`builtin:chain`。登录页激活时直接以该页为`builtin:buttons.root`，选择固定完整按钮路径；仅核验实际实例、可交互状态及原守卫，不遍历全场景。已有登录授权直接复用，无授权不点击。
+2. 以现有`setup_action`及`builtin:click_button`调用该按钮一次，不另写点击C#，不勾协议、不换账号、不调用SDK或GM。登录来源只写固定步骤，如`original_text="确认固定登录页状态，必要时点击普通登录按钮并等待登录页消失。"`，不再写“读取当前登录页、登录按钮、协议开关与主界面状态”。
+3. 动作后使用[read-login-state.cs](../assets/templates/read-login-state.cs)独立新帧观察，设`poll.field=/login_page_state`、`operator=eq`、`value=absent`、`stable_samples=2`、`require_match=true`并绑定真实登录动作。登录页从激活变为不存在或不再激活，即按本框架约定完成登录准备；不额外等待`UI_Main`作为登录条件。未消失则保留未完成/实际错误，不重复点击。
 
-`GameButton` 与标准 `UnityEngine.UI.Button` 不同；真实回调先检查控件可点击和业务条件，一次调用成功不代表已发登录请求或登录成功。按当前源码/观察核对协议、账号及角色列表等条件，不沿用历史默认值，不自动勾选协议、更换账号或调用 SDK/GM。
+## 使用注意
 
-登录属独立准备 `setup_action`，来源、守卫和新帧遵循[共享链路](host-contract.md)。界面切换异步，登录页消失不足以证明主界面就绪；以当前真实就绪条件设置原预算内的 `poll.require_match=true`，等待稳定样本及最后确认帧，未确认不重发登录或重启。
+`GameObject.Find`只查激活层级，因此模板的`absent`表示当前没有激活登录页，也包含缓存但已隐藏的登录页；不做全场景非激活对象扫描。模板只返回状态和帧，不返回登录成功或测试通过的自述结论。
 
-主界面入口可能是同名容器下的内层按钮，目标页也可能在不同 Canvas；重新定位实际按钮和目标页面。登录、功能解锁、资源/计次及执行入口是不同事实，逐项按原用例核对，不能用某个展示字段替代全部前置或删除原限制。
+初始已处于稳定业务现场时跳过登录动作；启动空场景中尚未出现登录页不冒充已登录。按钮缺失、不可交互或点击后页面不消失时才按实际错误做定向诊断，不把协议扫描恢复成每轮固定前置。协议仍由原按钮回调处理，工具不绕过或自动同意。
+
+登录、业务页面就绪、功能解锁和资源条件是不同事实；业务原前置仍逐例检查。登录准备仍遵循[共享链路](host-contract.md)，不计入业务通过数。[click-login.cs](../assets/templates/click-login.cs)保留为历史兼容模板，常规路径使用已有内置按钮动作；不改历史已登记请求及脚本快照。

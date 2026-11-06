@@ -75,6 +75,18 @@ namespace UnityEngine {
             transform = new Transform();
             Attach(transform);
         }
+        // Find an exact active path within this isolated hierarchy; path is not a real scene.
+        public static GameObject Find(string path) {
+            if (Resources.root == null) { return null; }
+            foreach (Transform candidate in Resources.root.GetComponentsInChildren<Transform>(true)) {
+                if (candidate == null || candidate.gameObject == null || !candidate.gameObject.activeInHierarchy) { continue; }
+                string actualPath = candidate.name;
+                Transform parent = candidate.parent;
+                while (parent != null) { actualPath = parent.name + "/" + actualPath; parent = parent.parent; }
+                if (actualPath == path) { return candidate.gameObject; }
+            }
+            return null;
+        }
         // Add a controlled component instance; component is owned only by this fixture.
         public void Attach(Component component) { component.gameObject = this; components.Add(component); }
         // Return a stable local identity, never an identity of a real Unity object.
@@ -294,6 +306,47 @@ class BuiltinVisualTests(unittest.TestCase):
         # This is a .NET stub process, so it must not claim to be a Mono Player.
         self.assertFalse(actual["mono"])
         self.assertEqual(cast(JsonObject, actual["discovery"])["nodes"], [{"path": "Root", "name": "Root", "active": True}])
+
+    # Compile the shipped fixed-path template; mode selects active, hidden or absent login.
+    def read_login_state(self, mode: str) -> JsonObject:
+        body: str = (Path(__file__).resolve().parents[2] / "assets/templates/read-login-state.cs").read_text(encoding="utf-8")
+        source: str = FIXTURE.split("public static class VisualFixture {")[0] + r'''
+public static class LoginFixture {
+    // Execute the actual shipped template, without a substitute success flag.
+    private static object Read() { /* LOGIN_TEMPLATE */ }
+    // Build a fixed synthetic login hierarchy; args selects page visibility only.
+    public static int Main(string[] args) {
+        UnityEngine.GameObject root = new UnityEngine.GameObject("GameEntry");
+        UnityEngine.Resources.root = root.transform;
+        UnityEngine.Transform parent = root.transform;
+        foreach (string name in new string[] { "Builtin", "UI", "AdapterArea", "Canvas0" }) {
+            UnityEngine.GameObject child = new UnityEngine.GameObject(name);
+            child.transform.parent = parent;
+            parent.children.Add(child.transform);
+            parent = child.transform;
+        }
+        if (args[0] != "absent") {
+            UnityEngine.GameObject page = new UnityEngine.GameObject("UI_LoginGame");
+            page.activeInHierarchy = args[0] == "active";
+            page.transform.parent = parent;
+            parent.children.Add(page.transform);
+        }
+        Console.Write(new JavaScriptSerializer().Serialize(Read()));
+        return 0;
+    }
+}
+'''
+        return compile_fixture(self, self.compiler, source.replace("/* LOGIN_TEMPLATE */", body), [mode])
+
+    # An active login page remains unfinished even without protocol or main-page controls.
+    def test_fixed_login_template_reads_only_page_and_frame(self) -> None:
+        self.assertEqual(self.read_login_state("active"), {"login_page_state": "active_in_hierarchy", "frame": 23})
+
+    # Hidden cached pages and removed pages both satisfy the user's visible-page contract.
+    def test_fixed_login_template_treats_hidden_or_removed_page_as_absent(self) -> None:
+        for mode in ("hidden", "absent"):
+            with self.subTest(mode=mode):
+                self.assertEqual(self.read_login_state(mode), {"login_page_state": "absent", "frame": 23})
 
 
 class WrapperValueTests(unittest.TestCase):
