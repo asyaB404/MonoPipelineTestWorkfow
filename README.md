@@ -11,6 +11,8 @@
 | `.agents/skills/mono-pipeline-functiontest` | PC执行宿主、模板、公共源码、原ZIP及许可、交付清单 | 整个技能目录复制到目标项目，不挑选其内部文件 |
 | `.agents/skills`其余9个技能 | 原父Workflow、生成用例、静态UI参考、图像对比、统计、用量及上传；`unity-functiontest`供父流程启动问题和方法参考 | 按使用场景补齐，保留现有同版本部署 |
 | `Assets/MonoPipelineFunctionTest`及同名`.meta` | 公共运行入口、反射、取证和编辑器构建辅助四源及GUID | 仅在目标尚未接入且需要重新出包时选择 |
+| `Assets/Editor/ClientEditor/GlobalMonoPipelineGameClientBuild.cs`及`.meta` | 同GameClient框架的Mono打包菜单及原管线适配器 | 先合并下述框架依赖，再按原路径加入；其他框架不直接套用 |
+| `Assets/Editor/Core`、`Assets/Scripts/GameFramework` | 6个当前框架依赖源码及`.meta`，包含3处管线重载、菜单排序、Mono资源生成和预加载守卫 | 按需对比合并已有文件，不能将整个`Assets`直接覆盖目标工程 |
 | `Packages` | 7个原归档展开的Unity依赖，包含原DLL、元数据及许可 | 检查目标既有版本后逐包合并，不整目录覆盖 |
 | `Tools/AI` | 需求文档预处理、证据整理、Markdown及可选Python依赖清单 | 需要文档处理时复制；不是Mono运行宿主的依赖 |
 
@@ -20,7 +22,7 @@
 
 1. 已有可用Mono测试包：复制Mono技能即可直接使用；需完整父流程时按原契约补齐公共技能。明确以`mono-pipeline-functiontest`承接PC执行，不因父文本提到编辑器而调用Unity MCP。父Workflow原文未修改，也没有把它伪装成自动识别Mono的新版入口；协作细则见[workflow-contract.md](.agents/skills/mono-pipeline-functiontest/references/workflow-contract.md)。
 2. 新项目需要首次接入：先对比公共`Assets`源码、GUID及各依赖；优先按Mono技能的`unity-preview`与批准后的`unity-apply`做文件级接入，或人工备份后选择性复制相同文件。不要同时重复接入，不覆盖目标`Packages/manifest.json`、锁文件、业务源码或既有配置。源码复制成功不代表已经完成Unity编译、原资源管线构建或Player验收。
-3. 同GameClient框架需要构建菜单：另行审阅[可选构建接线](.agents/skills/mono-pipeline-functiontest/assets/adapters/GameClient/README.md)及其补丁，批准后接入；框架实现、HybridCLR、SDK、资源和服务端仍由目标项目提供，不自动套用到其他框架。已有现包不因本次技能整理要求重打。
+3. 同GameClient框架需要构建菜单：仓库已按工程路径提供菜单和6个框架依赖源码，共7个`.cs`及7个`.meta`；先按[编辑器依赖与迁移](Doc/AI开发文档/MonoPipeline编辑器依赖与迁移.md)核对目标并对比合并，再选择菜单文件。Skill内[四文件增量补丁](.agents/skills/mono-pipeline-functiontest/assets/adapters/GameClient/framework-overloads.patch)仍保留，但它不包含Mono资源生成和预加载守卫，不能只合并该补丁就视为完整迁移。框架其余实现、HybridCLR、SDK、资源和服务端仍由目标项目提供，不套用到其他框架。已有现包不因本次交付补全要求重打。
 
 ## 依赖
 
@@ -56,6 +58,12 @@ py -3 -X utf8 -I -B .agents/skills/mono-pipeline-functiontest/scripts/cli.py del
 
 Git基线提交`1797bdc926160655ebdf4b8138e10771ab7674b4`保存本次精简前版本；后续提交单独记录精简，便于比较和回退。`.gitattributes`保留文件原字节，避免换行转换破坏清单摘要；普通使用不刷新清单。
 
+打包侧新增7个源码及元数据的路径、大小、SHA256、作用与合并要求另见[mono-build-files.json](Tools/AI/mono-build-files.json)；这份清单不替代Skill自身交付清单，也不代表已经在目标工程编译或构建成功。
+
 本仓库不包含旧PC技能、MCP服务器、历史运行产物、临时脚本、描述符、Player或账号令牌。`unity-functiontest`是随父流程保留的原参考副本，其中历史PC/MCP引用不是Mono依赖，也不保证在本仓库独立运行；需编辑器MCP测试时使用原FunctionTest交付，不自动切换后端。父Workflow的`config.json`按源项目原样保留，部署时应核实其用户名/项目组兜底值；运行时仍优先使用真实Cyou环境。
 
 仅限原授权范围内公司内部使用，保留[内部迁移许可](.agents/skills/mono-pipeline-functiontest/references/internal-license.md)及各包原许可，不授予公开再分发权限。离线检查不代替公司CyouCode实机验收，不承诺提高业务passed数。
+
+## 修改记录
+
+2026-11-06，Codex：补齐原先仅位于Skill内部的打包菜单，按工程路径提供7个源码和7个元数据文件，补充Mono资源生成、AOT预加载与目标框架依赖说明；当前工程、Skill执行逻辑、父Workflow和原7个依赖包不改，未触发构建。

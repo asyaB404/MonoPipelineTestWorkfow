@@ -1,0 +1,108 @@
+{
+  "_comment": "Created: 2026-11-06; Author: Codex. Exact current GameClient integration copies, not a standalone game/framework SDK; preserve source copyright and GUIDs. Paths relative to repository root.",
+  "schema": "mono-pipeline-gameclient-build-files/1",
+  "reference_unity": "2022.3.62f3",
+  "reference_hybridclr": "8.8.0",
+  "source_count": 7,
+  "files": [
+    {
+      "path": "Assets/Editor/ClientEditor/GlobalMonoPipelineGameClientBuild.cs",
+      "bytes": 26392,
+      "sha256": "1c8134e6ad158758de4385a3ad38d6b2a699a368a3e2641b2288ebfb9e270e8b",
+      "role": "GameClient build menu and per-build platform adapter",
+      "deployment": "add-if-absent; otherwise compare",
+      "meta": {
+        "path": "Assets/Editor/ClientEditor/GlobalMonoPipelineGameClientBuild.cs.meta",
+        "bytes": 251,
+        "sha256": "d26fae21eb2af029b71d2669096d46f1b2fd55f319cd9799174cb3f6ab91060d"
+      }
+    },
+    {
+      "path": "Assets/Editor/Core/MenuPriorityConst.cs",
+      "bytes": 23808,
+      "sha256": "a1874e973ec51a3494f41c6a0383adc4c48cbcf0a8930d30c618acb5f5f946ca",
+      "role": "Menu priority alias",
+      "deployment": "merge-existing; do-not-blindly-overwrite",
+      "meta": {
+        "path": "Assets/Editor/Core/MenuPriorityConst.cs.meta",
+        "bytes": 243,
+        "sha256": "bff605076a1b854ecbe44b535fe258e20e682b4b680b086c8fc692e1a586fdc6"
+      }
+    },
+    {
+      "path": "Assets/Scripts/GameFramework/Editor/Build/BuildPipelineX.cs",
+      "bytes": 21302,
+      "sha256": "78a2c286e47761db43ff2eb2b7a06cb7b387a5f4157647793849b5f791a0d9e2",
+      "role": "Explicit Mono backend and per-call platform factory",
+      "deployment": "merge-existing; do-not-blindly-overwrite",
+      "meta": {
+        "path": "Assets/Scripts/GameFramework/Editor/Build/BuildPipelineX.cs.meta",
+        "bytes": 88,
+        "sha256": "b3ff22a3892bbda3cedb10743821af9367ef519da4df30294a0210e1e335d21f"
+      }
+    },
+    {
+      "path": "Assets/Scripts/GameFramework/Editor/Build/App/BuildAppPipeline.cs",
+      "bytes": 1229,
+      "sha256": "cfc32ba9f18173776790f4a3ab445636bde372d2c5b6c4683b9899c4e4b3c5dd",
+      "role": "Original App pipeline forwarding overload",
+      "deployment": "merge-existing; do-not-blindly-overwrite",
+      "meta": {
+        "path": "Assets/Scripts/GameFramework/Editor/Build/App/BuildAppPipeline.cs.meta",
+        "bytes": 243,
+        "sha256": "942d553acdf43335abf84e0348b4338a29a4a1d8f8e93dad3d4bf0c8bd9fb62b"
+      }
+    },
+    {
+      "path": "Assets/Scripts/GameFramework/Editor/Build/App/Builder/AppBuilder.cs",
+      "bytes": 7161,
+      "sha256": "2e1153e564ea2cc40a2404d3286f472cb12a0d20563036ecc31a2e92131b5473",
+      "role": "Original App lifecycle with successful BuildReport",
+      "deployment": "merge-existing; do-not-blindly-overwrite",
+      "meta": {
+        "path": "Assets/Scripts/GameFramework/Editor/Build/App/Builder/AppBuilder.cs.meta",
+        "bytes": 243,
+        "sha256": "07288f9f7b8b42d6da709b3f1a2ff19523d7ebabf634437862fc09fa8ac5bdb5"
+      }
+    },
+    {
+      "path": "Assets/Scripts/GameFramework/Editor/Build/Res/Builder/Impl/ResBuilderScript.cs",
+      "bytes": 10045,
+      "sha256": "c394a1af229731acd84b2a01080683cd75c165e9c611135cfe8d97885aa66693",
+      "role": "Mono hot-update DLL generation and IL2CPP-only AOT build",
+      "deployment": "merge-existing; do-not-blindly-overwrite",
+      "meta": {
+        "path": "Assets/Scripts/GameFramework/Editor/Build/Res/Builder/Impl/ResBuilderScript.cs.meta",
+        "bytes": 88,
+        "sha256": "4648e8a5c15528bd2a05629856dcdae5ee79ba5176f9c762d4b61b9b7064989b"
+      }
+    },
+    {
+      "path": "Assets/Scripts/GameFramework/Runtime/Logic/Preload/Preloader/PreloaderCoder.cs",
+      "bytes": 4896,
+      "sha256": "f9b4a276c6c1b52f3e71a9e71e6400ba6a6b385c56d175c493aca3e3143ee081",
+      "role": "Mono startup: IL2CPP-only AOT count/load guards",
+      "deployment": "merge-existing; do-not-blindly-overwrite",
+      "meta": {
+        "path": "Assets/Scripts/GameFramework/Runtime/Logic/Preload/Preloader/PreloaderCoder.cs.meta",
+        "bytes": 243,
+        "sha256": "a3d36a5d86cf945cad3391f1cae683c8618ce6cd0d387588c5dfd32a14890eff"
+      }
+    }
+  ],
+  "requires_target_project": [
+    "Existing compatible GameFramework App/Res pipeline, runtime libraries and business project",
+    "BuildOption.ScriptingBackend and BuildOption.Create(..., BuildProfilerType)",
+    "AppBuilderWindow.OnPreBuild uses Option.ScriptingBackend; AppBuilderWindowNoSDK remains available",
+    "AppBuilderResult(bool, string, object), Report and IsSuccess",
+    "Core_Editor.EditorGameDefine.BuildWorkPath and menu priorities",
+    "HybridCLR editor/runtime and SDK editor build dependencies",
+    "Original scenes, App/Res/Code assets, platform settings and normal build permissions"
+  ],
+  "limits": [
+    "No business project or complete framework copied",
+    "No automatic merge, import, Unity compilation or build",
+    "Framework copies include existing project-specific changes: review before migration",
+    "Existing generic four-source payload and seven package archives remain unchanged"
+  ]
+}
