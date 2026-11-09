@@ -208,7 +208,7 @@ class AuditReportTests(unittest.TestCase):
         with fixture.session() as session:
             session.invoke("attach", {})
             session.invoke("start-case", {"case_id": "R-1"})
-            fixture.observe(session, covers=True)
+            fixture.observe(session, covers=False)
             session.invoke("compare", fixture.comparison("read-expect", "before", "/counter", 3, case_id="R-1"))
             fixture.world.fail_next = "runtime"
             fixture.observe(session, "extra-discovery", "extra", scope="discovery")
@@ -286,7 +286,7 @@ class AuditReportTests(unittest.TestCase):
         with fixture.session() as session:
             session.invoke("attach", {})
             session.invoke("start-case", {"case_id": "C-1"})
-            fixture.observe(session, covers=True)
+            fixture.observe(session, covers=False)
             weak: JsonObject = fixture.comparison("weak-binding", "before", "/enabled", True)
             session.invoke("compare", weak)
             session.invoke("final", {"status": "test_inconclusive", "category": "insufficient_observation",

@@ -114,7 +114,7 @@ class WorkflowPreparationTests(unittest.TestCase):
     # 功能：简化输入不弱化自主启动边界、显式许可和冻结门禁；参数 self 为测试实例。
     def test_workflow_preserves_manual_start_and_explicit_permission_gates(self) -> None:
         text: str = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8-sig")
-        for requirement in ("不杀死、不重启", "由当前 Agent 自主启动 Player", "不再要求用户手动启动",
+        for requirement in ("通常不杀进程、不重启", "默认复用，否则由当前 Agent 自主启动",
                             "不伪造 PID/描述符", "不自造许可证", "不等于运行或账号操作授权",
                             "不默认接受或扩大权限", "整轮冻结", "同一 ID 永不重放", "仅离线准备时",
                             "不生成冒充测试完成的正式报告"):

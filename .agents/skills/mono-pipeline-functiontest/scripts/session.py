@@ -55,6 +55,24 @@ SUITE_STEP_LIMIT = 4096
 # 不替代任何原文绑定、字段选择、操作符或独立预期，也不改变门禁。缺失字段才补，已写字段不被覆盖。
 PLAN_DEFAULT_KEYS = frozenset({"send", "target", "value_format", "timeout_ms", "read_only_review",
                                "target_review", "reason"})
+# 原步骤含明确交互动词时，读取不能代替动作覆盖；描述已打开/已关闭状态不自动视为交互。
+ACTION_STEP_PATTERN = re.compile(
+    r"点击|点按|单击|双击|长按|拖动|滑动|选择|切换|提交|领取|抽取|祈愿|升级|购买|保存|使用|激活|兑换|装备|启动|触发|执行|"
+    r"(?:^|[，,。；;]|并|然后|再|随后|接着|入口|按钮|页签|选项卡|功能|面板|页面|界面)\s*"
+    r"(?:输入|打开|进入|退出|关闭|返回|前往|导航到|跳转到|切换到)|"
+    r"\b(?:click|tap|press|drag|swipe|type|select|choose|toggle|switch|submit|claim|draw|pull|upgrade|purchase|save|use|activate|redeem|equip|trigger|perform|execute)\b|"
+    r"(?:^|[.;,]|\bthen\b|\band\b)\s*(?:input|enter|exit|open|close|return|navigate|switch to)\b",
+    re.IGNORECASE,
+)
+NAVIGATION_ACTION_PATTERN = re.compile(
+    r"(?:点击|点按|单击).{0,40}(?:入口|页签|选项卡|功能|页面|界面|面板)|"
+    r"(?:打开|进入|前往|导航到|跳转到|切换到).{0,40}(?:功能|页面|界面|面板|模块|入口)|"
+    r"\b(?:click|tap|open|enter|navigate to|go to)\b.{0,50}\b(?:entry|feature|module|page|screen|panel|menu)\b", re.IGNORECASE | re.DOTALL)
+
+
+# 功能：判断原步骤是否明确要求交互；参数 value 为原文，不从预期或字段名推断动作。
+def step_requires_action(value: str) -> bool:
+    return ACTION_STEP_PATTERN.search(value) is not None
 # 每个 operation 允许从计划级 defaults 继承的字段；未登记的操作不继承任何字段（compare/final 必须逐条判断）。
 STEP_DEFAULT_FIELDS: dict[str, frozenset[str]] = {
     "observe": frozenset({"send", "target", "value_format", "timeout_ms", "read_only_review", "reason"}),
@@ -218,13 +236,86 @@ def poll_condition(value: JsonValue, after_command_id: JsonValue) -> JsonObject 
 
 # 功能：解析 Agent 审阅的共享准备来源，不加入业务原全集；参数 request 保留准备步骤、预期和授权范围说明，limits 为原预算。
 def parse_chain_source(request: JsonObject, limits: Limits) -> OriginalCase:
-    keys_only(request, {"schema", "title", "preconditions", "steps", "expected", "reviewer", "review"},
+    keys_only(request, {"schema", "title", "preconditions", "steps", "expected", "reviewer", "review",
+                        "capability_gate"},
               "chain source", {"schema", "title", "preconditions", "steps", "expected", "reviewer", "review"})
     if request["schema"] != CHAIN_SCHEMA or request["reviewer"] != "current_agent":
         raise InputError("共享链路必须来自当前 Agent 审阅的独立准备来源")
     text(request["review"], "chain review", trim=False)
     source: JsonObject = {**request, "case_id": CONTROL_CASE}
-    return parse_cases(canonical(source), limits).cases[0]
+    original: OriginalCase = parse_cases(canonical(source), limits).cases[0]
+    gate_value: JsonValue = request.get("capability_gate")
+    if gate_value is not None:
+        gate: JsonObject = object_value(gate_value, "capability_gate")
+        keys_only(gate, {"name", "entry_path", "step_index", "expected_index", "ready_field"},
+                  "capability_gate", {"name", "entry_path", "step_index", "expected_index", "ready_field"})
+        name: str = text(gate["name"], "capability_gate.name")
+        text(gate["entry_path"], "capability_gate.entry_path")
+        step_index: int = integer(gate["step_index"], "capability_gate.step_index")
+        expected_index: int = integer(gate["expected_index"], "capability_gate.expected_index")
+        check_pointer(gate["ready_field"], "capability_gate.ready_field")
+        step_text: str = original.item("step", step_index).text
+        expected_text: str = original.item("expected", expected_index).text
+        if not NAVIGATION_ACTION_PATTERN.search(step_text) or name.casefold() not in step_text.casefold() or name.casefold() not in expected_text.casefold():
+            raise InputError("capability_gate 必须绑定包含目标名称的真实入口交互步骤及对应可用预期")
+    return original
+
+
+# 功能：在共享链路收口时核验 GM/准备动作之后的真实目标入口与可用态；参数 source 为原链路，item 为重建状态，commands 为本轮命令。
+def chain_action_gate_error(source: OriginalCase, item: CaseState, commands: dict[str, JsonObject]) -> str | None:
+    gate_value: JsonValue = source.raw.get("capability_gate")
+    if not item.actions and gate_value is None:
+        return None
+    if gate_value is None:
+        return "含准备动作的共享链路必须声明目标功能入口与可用态 capability_gate"
+    gate: JsonObject = object_value(gate_value, "capability_gate")
+    if not item.actions:
+        return "共享链路声明了 capability_gate，但没有真实入口动作"
+    field: str = str(gate["ready_field"])
+    expected_index: int = integer(gate["expected_index"], "capability expected index")
+
+    def ready_was_compared_after(action_id: str) -> bool:
+        post_action_observations: set[str] = {
+            observation_id for observation_id, observation in item.observations.items()
+            if observation.get("valid") is True and observation.get("after_command_id") == action_id
+        }
+        for comparison in item.comparisons.values():
+            binding: JsonObject = object_value(comparison.get("binding"), "capability ready comparison")
+            basis: JsonObject = object_value(binding.get("basis"), "capability ready basis")
+            if (comparison.get("valid") is True and comparison.get("matched") is True
+                    and binding.get("scope") == "expected" and binding.get("index") == expected_index
+                    and binding.get("field") == field and binding.get("operator") == "eq"
+                    and binding.get("observation_id") in post_action_observations
+                    and basis.get("kind") == "literal" and basis.get("value") is True):
+                return True
+        return False
+
+    entry_action_ids: list[str] = []
+    for action_id in item.actions:
+        action_record: JsonObject | None = commands.get(action_id)
+        if action_record is None:
+            continue
+        action: JsonObject = record_data(action_record)
+        if action.get("scope") != "step" or action.get("index") != gate["step_index"]:
+            continue
+        original_ref: JsonObject = object_value(action.get("script_original"), "capability action source")
+        action_source: JsonObject = object_value(original_ref.get("source"), "capability action metadata")
+        options: JsonObject = object_value(action_source.get("options"), "capability action options")
+        action_text: str = text(action.get("original_text"), "capability action text", trim=False)
+        if (action_source.get("kind") == "builtin_action"
+                and action_source.get("path") == "builtin:click_button"
+                and options.get("path") == gate["entry_path"]
+                and NAVIGATION_ACTION_PATTERN.search(action_text)):
+            entry_action_ids.append(action_id)
+    if len(entry_action_ids) != 1:
+        return "共享链路必须恰有一次 capability_gate 指定目标入口的真实点击"
+    entry_action_id: str = entry_action_ids[0]
+    if not ready_was_compared_after(entry_action_id):
+        return "目标入口动作后缺少新帧上的目标功能可用态原预期比较"
+    last_action_id: str = item.actions[-1]
+    if last_action_id != entry_action_id and not ready_was_compared_after(last_action_id):
+        return "后续准备动作后缺少新帧上的目标功能最终可用态原预期比较"
+    return None
 
 
 # 功能：单请求和计划共用的提交前结构检查；参数 original 为完整原例、limits 为真实目标预算、base 为请求目录。
@@ -470,7 +561,8 @@ def suite_reason_selfcheck(parsed: list[tuple[str, str, list[tuple[str, JsonObje
 
 
 # 功能：汇总原格式计划的覆盖事实；参数parsed已静态校验，不猜字段语义、不预判现场状态、不读取Player。
-def planning_summary(parsed: list[tuple[str, str, list[tuple[str, JsonObject]]]]) -> JsonObject:
+def planning_summary(parsed: list[tuple[str, str, list[tuple[str, JsonObject]]]],
+                     cases: CaseInput | None = None) -> JsonObject:
     rows: list[JsonValue] = []
     statuses: JsonObject = {}
     terminal: list[JsonValue] = []
@@ -479,6 +571,12 @@ def planning_summary(parsed: list[tuple[str, str, list[tuple[str, JsonObject]]]]
         status: str = str(steps[-1][1]["status"])
         statuses[status] = int(cast(int, statuses.get(status, 0))) + 1
         actions: list[JsonObject] = [request for operation, request in steps if operation == "action"]
+        action_step_indices: list[int] = sorted({integer(request["index"], "step index") for request in actions
+                                                  if request.get("scope") == "step"})
+        original: OriginalCase | None = cases.case(case_id) if cases is not None else None
+        action_required_indices: list[int] = ([] if original is None else
+            [item.index for item in original.steps if step_requires_action(item.text)])
+        missing_action_indices: list[int] = sorted(set(action_required_indices) - set(action_step_indices))
         expected: list[int] = sorted({integer(request["index"], "expected index") for operation, request in steps
                                      if operation == "compare" and request.get("scope") == "expected"})
         if actions:
@@ -495,7 +593,9 @@ def planning_summary(parsed: list[tuple[str, str, list[tuple[str, JsonObject]]]]
                     **({"value": basis["value"]} if basis["kind"] == "literal" else {"basis": basis})})
         rows.append({"case_id": case_id, "requested_status": status,
             "action_count": len(actions),
-            "action_step_indices": sorted({integer(request["index"], "step index") for request in actions if request["scope"] == "step"}),
+            "action_step_indices": action_step_indices,
+            "action_required_step_indices": action_required_indices,
+            "missing_required_action_step_indices": missing_action_indices,
             "readonly_step_indices": sorted({integer(request["index"], "step index") for operation, request in steps
                 if operation == "observe" and request.get("covers_step") is True}),
             "expected_indices": expected, "precondition_bindings": bindings})
@@ -926,6 +1026,10 @@ def replay(records: list[JsonObject], cases: CaseInput, root: Path,
             coverage_chain: JsonObject = case_coverage(state.chain_original, item_chain)
             if data.get("ready") is not True or state.frozen or item_chain.frozen or coverage_chain["all_matched"] is not True or data.get("coverage") != coverage_chain:
                 raise IntegrityError("共享准备未独立验证或未知阶段不能声明链路就绪")
+            if state.chain_original.raw.get("capability_gate") is not None:
+                gate_error: str | None = chain_action_gate_error(state.chain_original, item_chain, state.commands)
+                if gate_error is not None:
+                    raise IntegrityError(gate_error)
             state.chain_closed = record
             state.current = None
         elif event == "case_started":
@@ -1508,9 +1612,12 @@ class Session:
             declared_steps: set[int] = set()
             expected: set[int] = set()
             preconditions: set[int] = set()
+            action_steps: set[int] = set()
             for operation, request in steps:
                 if request.get("scope") == "step" and (operation == "action" or (operation == "observe" and request.get("covers_step") is True)):
                     declared_steps.add(integer(request["index"], "declared step"))
+                if operation == "action" and request.get("scope") == "step":
+                    action_steps.add(integer(request["index"], "action step"))
                 elif operation == "compare":
                     if request.get("scope") == "expected":
                         expected.add(integer(request["index"], "declared expected"))
@@ -1519,6 +1626,10 @@ class Session:
             gaps: JsonObject = coverage_gaps(original, declared_steps, expected, preconditions)
             if any(gaps.values()):
                 raise InputError("拟通过用例的覆盖声明不完整：" + original.case_id + " " + canonical(gaps).decode("utf-8"))
+            missing_actions: list[int] = [item.index for item in original.steps
+                if step_requires_action(item.text) and item.index not in action_steps]
+            if missing_actions:
+                raise InputError("拟通过用例的交互步骤未声明真实 action：" + original.case_id + " " + canonical(missing_actions).decode("utf-8"))
         if final_request.get("status") != "test_inconclusive":
             return
         category: JsonValue = final_request.get("category")
@@ -1540,6 +1651,7 @@ class Session:
         observations: dict[str, JsonObject] = {}
         comparisons: dict[str, JsonObject] = {}
         actions: list[str] = []
+        action_step_indices: set[int] = set()
         step_action_paths: dict[int, set[str | None]] = {}
         precondition_values: dict[tuple[str, int, str], bool | int | float | str] = {}
         for operation, request in steps:
@@ -1549,6 +1661,11 @@ class Session:
                     raise InputError("计划独立基线重复登记")
                 references.add(reference_id)
             elif operation == "observe":
+                if request.get("covers_step") is True and request.get("scope") == "step":
+                    covered_index: int = integer(request.get("index"), "plan covered step")
+                    if (step_requires_action(text(request.get("original_text"), "plan step text", trim=False))
+                            and covered_index not in action_step_indices):
+                        raise InputError("原步骤明确要求交互，不能用 covers_step=true 的只读观察替代真实 action")
                 after: JsonValue = request.get("after_command_id")
                 if actions:
                     # 本例已有动作时，读取必须显式关联最后一次动作（与运行期 _read_request 一致）。
@@ -1587,6 +1704,7 @@ class Session:
                         raise InputError("计划内守卫必须是同一 before 的原步骤 guard 比较")
                 if request.get("scope") == "step":
                     index: int = integer(request.get("index"), "plan action index")
+                    action_step_indices.add(index)
                     path: str | None = builtin_action_path(request) if request.get("builtin") == "click_button" else None
                     prior_paths: set[str | None] = step_action_paths.setdefault(index, set())
                     if prior_paths and (path is None or None in prior_paths or path in prior_paths):
@@ -1749,7 +1867,7 @@ class Session:
             return {"schema": schema, "kind": "plan", "case_id": case_id, "group_id": group,
                     "step_count": len(steps), "operations": [operation for operation, _ in steps],
                     "default_keys": sorted(self._parse_defaults(plan.get("defaults"))),
-                    "planning_summary": planning_summary([(case_id, group, steps)]),
+                    "planning_summary": planning_summary([(case_id, group, steps)], self.cases),
                     "player_contacted": False, "journal_written": False}
         if schema == SUITE_SCHEMA:
             parsed: list[tuple[str, str, list[tuple[str, JsonObject]]]] = self._parse_suite(plan)
@@ -1758,7 +1876,7 @@ class Session:
                     "step_count": sum(len(steps) for _, _, steps in parsed),
                     "default_keys": sorted(self._parse_defaults(plan.get("defaults"))),
                     "selfcheck": suite_reason_selfcheck(parsed),
-                    "planning_summary": planning_summary(parsed),
+                    "planning_summary": planning_summary(parsed, self.cases),
                     "player_contacted": False, "journal_written": False}
         raise InputError("plan-check 只接受 mono-pipeline-case-plan/1 或 mono-pipeline-case-suite/1")
 
@@ -2086,6 +2204,10 @@ class Session:
         keys_only(request, set(), "chain-end")
         if self.state.current != CONTROL_CASE or self.state.chain_original is None or self.state.chain_closed is not None:
             raise InputError("没有唯一活动共享链路可收口")
+        gate_error: str | None = chain_action_gate_error(self.state.chain_original,
+            self.state.cases[CONTROL_CASE], self.state.commands)
+        if gate_error is not None:
+            raise InputError(gate_error)
         checked: JsonObject = self._final({"status": "passed"}, dry_run=True)
         if checked["status"] != "passed":
             raise InputError("共享准备存在独立反例，不能声明链路就绪")
@@ -2173,6 +2295,16 @@ class Session:
         covers: JsonValue = request.get("covers_step", False)
         if type(covers) is not bool or (covers and (scope != "step" or purpose not in {"step", "after"})):
             raise InputError("只读步骤覆盖必须显式关联原 step，且不能用 discovery 代替")
+        if covers and step_requires_action(original.item("step", integer(request.get("index"), "read step index")).text):
+            step_index: int = integer(request.get("index"), "read step index")
+            matching_action: bool = any(
+                record_data(self.state.commands[action_id]).get("mode") == "action"
+                and record_data(self.state.commands[action_id]).get("scope") == "step"
+                and record_data(self.state.commands[action_id]).get("index") == step_index
+                for action_id in item.actions if action_id in self.state.commands
+            )
+            if not matching_action:
+                raise InputError("原步骤明确要求交互，不能用 covers_step=true 的只读观察替代真实 action")
         if item.actions:
             after_id: str = identifier(request.get("after_command_id"), "after_command_id")
             if after_id != item.actions[-1]:

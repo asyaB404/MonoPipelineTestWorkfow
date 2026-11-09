@@ -44,7 +44,7 @@
 
 先看 attach 的 `discovery`，区分登录页和已进入业务现场，再选择实际准备来源。初态只是选路参考，不是已登记业务观察，不证明权限、登录或就绪；不读文本/图片，不自动导航。附加后、首个 `start-case` 前 `chain-start`：schema 为 `mono-pipeline-chain/1`，含完整标题、前置、步骤、预期及 Agent 审阅；来源来自已批准范围，不添加业务例或权限。首次观察仍须 `builtin:chain`。
 
-准备仍使用普通 `observe/compare/action`：每次动作需 `setup_action`、同目标最新 before、独立通过守卫和上一动作后的新帧。准备索引只绑定独立来源；所有准备预期成立后，以空请求 `chain-end`，就绪由宿主回算，不能手填。
+准备仍使用普通 `observe/compare/action`：每次动作需 `setup_action`、同目标最新 before、独立通过守卫和上一动作后的新帧。准备索引只绑定独立来源；含动作的来源还必须声明`capability_gate`，把实际目标入口按钮和页面可用原预期绑定。入口点击后的新帧须匹配指定布尔`true`；入口后的其他准备动作完成后，最后动作的新帧也须再次证明目标功能可用。缺门禁或最终状态未确认时`chain-end`拒绝关闭；纯只读来源继续使用原覆盖规则。所有准备预期成立后，以空请求 `chain-end`，就绪由宿主回算，不能手填。
 
 链路未验证、只读脚本冻结、未知动作或来源变化时不准就绪/开始业务例。链路在同一 journal 留完整证据但不生成业务 final、不计原总数或通过数；各例仍独立验证自己的前置和预期。回归见 [test_chain_context.py](../scripts/tests/test_chain_context.py)。
 

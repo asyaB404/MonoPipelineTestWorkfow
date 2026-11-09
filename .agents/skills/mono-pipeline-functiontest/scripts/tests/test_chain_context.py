@@ -5,12 +5,22 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
 from ..contracts import EnvironmentBlocked, InputError, JsonObject, JsonValue, canonical
 from ..session import CHAIN_SCHEMA, CONTROL_CASE, Session
-from .support import Fixture, readonly_case
+from .support import Fixture, World, readonly_case
+
+
+@dataclass
+class FeatureGateWorld(World):
+    """The target panel becomes ready only after its distinct entry button is clicked."""
+
+    def business(self) -> JsonObject:
+        return {"counter": self.counter, "enabled": not self.missing_target,
+                "panel_ready": self.action_count > 0 and not self.missing_target}
 
 
 class ChainContextTests(unittest.TestCase):
@@ -57,6 +67,36 @@ class ChainContextTests(unittest.TestCase):
                 "scope": "step", "index": 2, "original_text": "执行一次获准的准备操作",
                 "target": fixture.world.target, "before_observation_id": before, "guard_comparison_ids": [guard],
                 "target_review": "仅夹具：唯一准备目标及独立通过守卫", "reason": "只发送一次获准准备操作"}
+
+    # 功能：构造要求真实进入目标功能的共享来源；门禁将目标按钮与动作后可用事实绑定。
+    def feature_source(self) -> JsonObject:
+        source: JsonObject = self.source()
+        source["steps"] = ["读取全场景准备事实", "点击 Inventory 功能入口并进入 Inventory 面板",
+            "关闭准备弹窗并保持 Inventory 面板可用"]
+        source["expected"] = ["准备时当前计数为 3", "Inventory 面板已打开且可用"]
+        source["capability_gate"] = {"name": "Inventory", "entry_path": "FixtureRoot/Container/Button",
+            "step_index": 2, "expected_index": 2, "ready_field": "/panel_ready"}
+        return source
+
+    # 功能：构造目标入口前观察和动作后面板事实；参数 fixture 提供隔离目标与临时脚本。
+    def feature_request(self, fixture: Fixture) -> tuple[JsonObject, JsonObject, JsonObject]:
+        step_text: str = "点击 Inventory 功能入口并进入 Inventory 面板"
+        before: JsonObject = {"command_id": "chain-feature-buttons", "observation_id": "chain-feature-before",
+            "builtin": "buttons", "builtin_options": {"root": "FixtureRoot/Container"},
+            "scope": "step", "index": 2, "original_text": step_text, "purpose": "before",
+            "target": fixture.world.target, "read_only_review": "仅夹具：读取目标入口按钮事实",
+            "reason": "发送目标入口动作前读取当前按钮"}
+        action: JsonObject = {"command_id": "chain-feature-open", "builtin": "click_button",
+            "builtin_options": {"path": "FixtureRoot/Container/Button"}, "scope": "step",
+            "index": 2, "original_text": step_text, "target": fixture.world.target,
+            "before_observation_id": "chain-feature-before", "guard_comparison_ids": ["chain-cmp-feature-guard"],
+            "target_review": "仅夹具：实际 Inventory 入口及独立按钮守卫", "reason": "只点击一次目标功能入口"}
+        after: JsonObject = {"command_id": "chain-feature-readiness", "observation_id": "chain-feature-after",
+            "script": str(fixture.script("chain-feature-readiness")), "scope": "step", "index": 2,
+            "original_text": step_text, "purpose": "after", "target": fixture.world.target,
+            "read_only_review": "仅夹具：读取动作后的面板可用事实",
+            "reason": "入口动作后读取目标面板状态", "after_command_id": "chain-feature-open"}
+        return before, action, after
 
     # 功能：完整只读链路先行，业务总数仍为1；参数 self 核验真实发布、重建、close、audit、report。
     def test_shared_chain_before_first_case_does_not_inflate_business_counts(self) -> None:
@@ -153,6 +193,67 @@ class ChainContextTests(unittest.TestCase):
             with self.assertRaises(InputError):
                 session.invoke("action", self.action(fixture, "chain-obs-two", "chain-cmp-new"))
             self.assertEqual(fixture.world.action_count, 1)
+
+    # 功能：GM/准备动作及其结果不足以证明目标功能可达；无目标入口门禁不得关闭链路。
+    def test_shared_action_cannot_close_without_feature_entry_gate(self) -> None:
+        fixture: Fixture = self.fixture()
+        with fixture.session() as session:
+            session.invoke("attach", {})
+            session.invoke("chain-start", self.source(True))
+            session.invoke("observe", self.read(fixture, "before-gm"))
+            session.invoke("compare", self.comparison(session, "gm-guard", "chain-obs-before-gm",
+                "guard", 2, "/enabled", True))
+            session.invoke("action", self.action(fixture, "chain-obs-before-gm", "chain-cmp-gm-guard"))
+            after: JsonObject = {**self.read(fixture, "after-gm", False),
+                "after_command_id": "chain-action-one"}
+            session.invoke("observe", after)
+            session.invoke("compare", self.comparison(session, "gm-result", "chain-obs-after-gm", value=4))
+            with self.assertRaisesRegex(InputError, "capability_gate"):
+                session.invoke("chain-end", {})
+            self.assertFalse(session.state.frozen)
+            self.assertIsNone(session.state.chain_closed)
+
+    # 功能：只有目标入口真实点击且动作后新帧证明面板可用，才允许共享链路ready。
+    def test_shared_chain_requires_and_accepts_fresh_feature_entry_gate(self) -> None:
+        fixture: Fixture = self.fixture()
+        fixture.world = FeatureGateWorld()
+        fixture.world.heartbeat_writer = fixture.refresh_descriptor
+        with fixture.session() as session:
+            session.invoke("attach", {})
+            session.invoke("chain-start", self.feature_source())
+            session.invoke("observe", self.read(fixture, "feature-home"))
+            session.invoke("compare", self.comparison(session, "feature-home", "chain-obs-feature-home"))
+            before, action, after = self.feature_request(fixture)
+            session.invoke("observe", before)
+            session.invoke("compare", self.comparison(session, "feature-guard",
+                "chain-feature-before", "guard", 2, "/nodes/0/effective_interactable", True))
+            session.invoke("action", action)
+            session.invoke("observe", after)
+            session.invoke("compare", self.comparison(session, "feature-ready",
+                "chain-feature-after", index=2, field="/panel_ready", value=True))
+            cleanup_guard: JsonObject = self.comparison(session, "feature-cleanup-guard",
+                "chain-feature-after", "guard", 3, "/enabled", True)
+            session.invoke("compare", cleanup_guard)
+            cleanup_action: JsonObject = {"command_id": "chain-feature-cleanup",
+                "script": str(fixture.script("chain-feature-cleanup", "ACTION")), "scope": "step",
+                "index": 3, "original_text": "关闭准备弹窗并保持 Inventory 面板可用",
+                "target": fixture.world.target, "before_observation_id": "chain-feature-after",
+                "guard_comparison_ids": ["chain-cmp-feature-cleanup-guard"],
+                "target_review": "仅夹具：动作后 Inventory 面板仍可用",
+                "reason": "仅关闭隔离夹具中的准备弹窗"}
+            session.invoke("action", cleanup_action)
+            with self.assertRaisesRegex(InputError, "后续准备动作后"):
+                session.invoke("chain-end", {})
+            final_read: JsonObject = {**after, "command_id": "chain-feature-final-read",
+                "observation_id": "chain-feature-final", "after_command_id": "chain-feature-cleanup",
+                "reason": "最后一次准备动作后重新确认目标面板"}
+            session.invoke("observe", final_read)
+            session.invoke("compare", self.comparison(session, "feature-final-ready",
+                "chain-feature-final", index=2, field="/panel_ready", value=True))
+            result: JsonObject = session.invoke("chain-end", {})
+            self.assertTrue(result["ready"])
+            self.assertEqual(fixture.world.action_count, 2)
+            self.assertTrue(session.invoke("status", {})["chain_ready"])
 
     # 功能：共享动作未知仍全轮冻结并禁止原用例；参数 self 保留真实部分副作用和0条业务 final。
     def test_unknown_chain_action_freezes_run_without_fake_business_final(self) -> None:

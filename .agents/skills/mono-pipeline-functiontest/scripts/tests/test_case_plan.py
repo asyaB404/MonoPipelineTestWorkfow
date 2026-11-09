@@ -16,7 +16,7 @@ from ..contracts import EnvironmentBlocked, InputError, IntegrityError, JsonObje
 from ..evidence import Journal, record_data
 from ..inputs import TargetConfig, parse_target
 from ..pipeline import IdentityHooks, Pipeline, windows_probe
-from ..session import BUILTIN_MAX_DEPTH, PLAN_SCHEMA, SUITE_SCHEMA, Session, builtin_observation, replay
+from ..session import BUILTIN_MAX_DEPTH, PLAN_SCHEMA, SUITE_SCHEMA, Session, builtin_observation, replay, step_requires_action
 from .support import Fixture, counter_case, readonly_case
 
 
@@ -682,6 +682,41 @@ class PlanCheckTests(unittest.TestCase):
         self.assertFalse(result["journal_written"])
         self.assertEqual(before, after)
         self.assertEqual(fixture.world.transport_count, self.attach_transports)
+
+    # 功能：静态摘要点出必需交互；明确描述当前状态的只读步骤不误触动作门禁。
+    def test_plan_check_distinguishes_required_interaction_from_readonly_state(self) -> None:
+        self.assertTrue(step_requires_action("从主界面卡池入口进入抽卡面板并核对标题"))
+        self.assertFalse(step_requires_action("读取当前已打开的 Inventory 面板状态"))
+        source: JsonObject = {"case_id": "ACTION-1", "title": "Feature entry",
+            "preconditions": [], "steps": ["从主界面卡池入口进入抽卡面板并核对标题"],
+            "expected": ["抽卡面板标题正确"]}
+        fixture: Fixture = Fixture(cases=[source])
+        self.addCleanup(fixture.cleanup)
+        read: JsonObject = {"command_id": "action-read", "observation_id": "action-observation",
+            "script": str(fixture.script("action-read")), "scope": "step", "index": 1,
+            "original_text": source["steps"][0], "purpose": "step", "covers_step": False,
+            "target": fixture.world.target, "read_only_review": "Isolated fixture read only.",
+            "reason": "Read current fixture facts."}
+        expected: JsonObject = fixture.comparison("action-expected", "action-observation",
+            "/counter", 3, case_id="ACTION-1")
+        body: JsonObject = {"case_id": "ACTION-1", "steps": [
+            {"operation": "start-case", "request": {"case_id": "ACTION-1"}},
+            {"operation": "observe", "request": read},
+            {"operation": "compare", "request": expected},
+            {"operation": "final", "request": {"status": "test_inconclusive",
+                "category": "insufficient_observation", "reason": "No action was sent in this static fixture."}}]}
+        plan: JsonObject = {"schema": PLAN_SCHEMA, **body}
+        with fixture.session() as session:
+            result: JsonObject = session.check_plan(plan)
+            summary: JsonObject = cast(JsonObject, result["planning_summary"])
+            row: JsonObject = cast(list[JsonObject], summary["cases"])[0]
+            self.assertEqual(row["action_required_step_indices"], [1])
+            self.assertEqual(row["missing_required_action_step_indices"], [1])
+            cast(JsonObject, cast(list[JsonObject], body["steps"])[1]["request"])["covers_step"] = True
+            cast(JsonObject, cast(list[JsonObject], body["steps"])[-1]["request"]).update({"status": "passed"})
+            with self.assertRaisesRegex(InputError, "原步骤明确要求交互"):
+                session.check_plan(plan)
+        self.assertEqual(fixture.world.transport_count, 0)
 
     # 功能：Codex 验证公开模板可直接进入原严格预检；参数 self 仅提供示例对应的临时原例和只读片段。
     def test_published_suite_template_uses_the_existing_strict_contract(self) -> None:
