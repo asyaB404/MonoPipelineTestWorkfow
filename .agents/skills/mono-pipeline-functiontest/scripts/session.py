@@ -1,5 +1,5 @@
 """创建日期：2026-10-26；作者：Cyou。
-更新日期：2026-11-05；更新人：Codex；可信只读错误隔离、固定按钮入口与附加初态。
+更新日期：2026-11-09；更新人：Codex；通用计划概况及同一步内不同按钮的必要交互。
 功能：持久逐条主动会话、合法前置/一次动作/新帧读取、原预期比较和唯一四状态 final。
 参数：完整用例、显式目标/权限、每次当前 Agent 的新请求；不包含模型服务或静态全集计划。
 """
@@ -446,12 +446,10 @@ def suite_reason_selfcheck(parsed: list[tuple[str, str, list[tuple[str, JsonObje
         status: JsonValue = steps[-1][1].get("status")
         batch_statuses[str(status)] = batch_statuses.get(str(status), 0) + 1
     if batch_actions == 0:
-        # 0 动作批必须逐例留 note 说明「为何无可执行动作」，否则理由只有观测事实、没有可复核的排除过程。
         unexplained: list[str] = [case_id for case_id, _group, steps in parsed
                                   if not any(operation == "note" for operation, _ in steps)]
         lines.append(
-            "[自检] 本批 0 个 action 步骤；若被测功能存在可点入口且已授权，"
-            "必须真实执行动作（用例前置是测试需求，不是客户端约束）；"
+            "[自检] 本批 0 个 action 步骤；纯只读例可以无动作，含交互原步骤须核对未执行原因；不绕过真实前置。"
             f"本批 note={batch_notes}，statuses={batch_statuses}，未留 note 的用例={unexplained}"
         )
     for case_id, _group, steps in parsed:
@@ -463,12 +461,46 @@ def suite_reason_selfcheck(parsed: list[tuple[str, str, list[tuple[str, JsonObje
         case_actions: int = sum(1 for operation, _ in steps if operation == "action")
         reason: str = str(final_request.get("reason", "")).strip().replace("\n", " ")
         snippet: str = reason[:60] + ("…" if len(reason) > 60 else "")
-        fact: str = "本例已有 observe" if case_observed else ("本批他例有 observe，可引用" if batch_observed else "本批尚无任何 observe，理由无本轮事实支撑")
+        fact: str = "本例已有 observe" if case_observed else ("他例 observe 不能替代本例事实" if batch_observed else "本批尚无任何 observe，理由无本轮事实支撑")
         lines.append(
             f"[自检] {case_id} status={status} category={final_request.get('category')} "
             f"fact={fact} actions={case_actions} reason=\"{snippet}\""
         )
     return lines
+
+
+# 功能：汇总原格式计划的覆盖事实；参数parsed已静态校验，不猜字段语义、不预判现场状态、不读取Player。
+def planning_summary(parsed: list[tuple[str, str, list[tuple[str, JsonObject]]]]) -> JsonObject:
+    rows: list[JsonValue] = []
+    statuses: JsonObject = {}
+    terminal: list[JsonValue] = []
+    action_cases: list[JsonValue] = []
+    for case_id, _, steps in parsed:
+        status: str = str(steps[-1][1]["status"])
+        statuses[status] = int(cast(int, statuses.get(status, 0))) + 1
+        actions: list[JsonObject] = [request for operation, request in steps if operation == "action"]
+        expected: list[int] = sorted({integer(request["index"], "expected index") for operation, request in steps
+                                     if operation == "compare" and request.get("scope") == "expected"})
+        if actions:
+            action_cases.append(case_id)
+        if not actions and not expected:
+            terminal.append(case_id)
+        bindings: list[JsonValue] = []
+        for operation, request in steps:
+            if operation == "compare" and request.get("scope") == "precondition":
+                binding: JsonObject = expand_rule_basis(request)
+                basis: JsonObject = object_value(binding["basis"], "plan basis")
+                bindings.append({"index": binding["index"], "original_text": binding["original_text"],
+                    "field": binding["field"], "operator": binding["operator"],
+                    **({"value": basis["value"]} if basis["kind"] == "literal" else {"basis": basis})})
+        rows.append({"case_id": case_id, "requested_status": status,
+            "action_count": len(actions),
+            "action_step_indices": sorted({integer(request["index"], "step index") for request in actions if request["scope"] == "step"}),
+            "readonly_step_indices": sorted({integer(request["index"], "step index") for operation, request in steps
+                if operation == "observe" and request.get("covers_step") is True}),
+            "expected_indices": expected, "precondition_bindings": bindings})
+    return {"status_counts": statuses, "action_case_ids": action_cases, "terminal_only_case_ids": terminal,
+            "cases": rows, "semantic_equivalence_proven": False}
 
 
 # 功能：生成设备侧命名观测脚本；参数 name 为已登记 op 名、options 为其参数，返回 C# 方法体字节。
@@ -706,9 +738,8 @@ def builtin_action_path(request: JsonObject) -> str:
     return path
 
 
-# 功能：从可信 before 派生并再次核验按钮实例，调用一次公开方法；参数 options 不接受用户手填实例或类型。
-def builtin_button_click(options: JsonObject, before: JsonObject) -> bytes:
-    path: str = builtin_action_path({"builtin": "click_button", "builtin_options": options})
+# 功能：取得当前路径唯一且可交互的按钮原值；参数before为宿主观察，path为其完整节点路径。
+def builtin_button_row(path: str, before: JsonObject) -> JsonObject:
     actual: JsonObject = object_value(before.get("value"), "button observation")
     nodes: JsonValue = actual.get("nodes")
     if actual.get("op") != "buttons" or actual.get("truncated") is not False or not isinstance(nodes, list) or type(actual.get("count")) is not int or actual["count"] != len(nodes):
@@ -726,6 +757,13 @@ def builtin_button_click(options: JsonObject, before: JsonObject) -> bytes:
     text(row.get("component_type"), "button component type")
     if row.get("click_method") not in {"InvokeOnClickListener", "onClick.Invoke"}:
         raise InputError("点击目标缺少已验证的公开点击接口")
+    return row
+
+
+# 功能：从可信 before 派生并再次核验按钮实例，调用一次公开方法；参数 options 不接受用户手填实例或类型。
+def builtin_button_click(options: JsonObject, before: JsonObject) -> bytes:
+    path: str = builtin_action_path({"builtin": "click_button", "builtin_options": options})
+    row: JsonObject = builtin_button_row(path, before)
     current: str = builtin_observation("buttons", {"root": path, "max_nodes": BUILTIN_MAX_NODES}).decode("utf-8")
     body: str = (
         "// mono-pipeline-builtin-click/1; Codex: one public invocation after identity checks.\n"
@@ -1502,7 +1540,7 @@ class Session:
         observations: dict[str, JsonObject] = {}
         comparisons: dict[str, JsonObject] = {}
         actions: list[str] = []
-        step_action_indices: set[int] = set()
+        step_action_paths: dict[int, set[str | None]] = {}
         precondition_values: dict[tuple[str, int, str], bool | int | float | str] = {}
         for operation, request in steps:
             if operation == "baseline":
@@ -1549,9 +1587,11 @@ class Session:
                         raise InputError("计划内守卫必须是同一 before 的原步骤 guard 比较")
                 if request.get("scope") == "step":
                     index: int = integer(request.get("index"), "plan action index")
-                    if index in step_action_indices:
-                        raise InputError("计划内同一原步骤动作重复；换 ID 也不能重复消耗")
-                    step_action_indices.add(index)
+                    path: str | None = builtin_action_path(request) if request.get("builtin") == "click_button" else None
+                    prior_paths: set[str | None] = step_action_paths.setdefault(index, set())
+                    if prior_paths and (path is None or None in prior_paths or path in prior_paths):
+                        raise InputError("计划内同一原步骤动作重复；仅可依次操作不同完整路径的内置按钮")
+                    prior_paths.add(path)
                 command_id: JsonValue = request.get("command_id")
                 if command_id is not None:
                     actions.append(identifier(command_id, "plan action command_id"))
@@ -1709,6 +1749,7 @@ class Session:
             return {"schema": schema, "kind": "plan", "case_id": case_id, "group_id": group,
                     "step_count": len(steps), "operations": [operation for operation, _ in steps],
                     "default_keys": sorted(self._parse_defaults(plan.get("defaults"))),
+                    "planning_summary": planning_summary([(case_id, group, steps)]),
                     "player_contacted": False, "journal_written": False}
         if schema == SUITE_SCHEMA:
             parsed: list[tuple[str, str, list[tuple[str, JsonObject]]]] = self._parse_suite(plan)
@@ -1717,6 +1758,7 @@ class Session:
                     "step_count": sum(len(steps) for _, _, steps in parsed),
                     "default_keys": sorted(self._parse_defaults(plan.get("defaults"))),
                     "selfcheck": suite_reason_selfcheck(parsed),
+                    "planning_summary": planning_summary(parsed),
                     "player_contacted": False, "journal_written": False}
         raise InputError("plan-check 只接受 mono-pipeline-case-plan/1 或 mono-pipeline-case-suite/1")
 
@@ -1725,9 +1767,7 @@ class Session:
         SecretGuard().check(plan)
         self._request_base = origin_path.parent
         parsed: list[tuple[str, str, list[tuple[str, JsonObject]]]] = self._parse_suite(plan)
-        # 批量太快会掩盖脱离现场的臆测理由；执行前把每条不确定/阻塞理由与其事实支撑一次性打印，供当前 Agent 确认。
-        for line in suite_reason_selfcheck(parsed):
-            print(line)
+        selfcheck: list[str] = suite_reason_selfcheck(parsed)
         raw: bytes = read_regular(origin_path, self.journal.limits.input_bytes)
         stored: JsonObject = object_value(strict_json(raw, self.journal.limits.input_bytes, bom=True), "CLI case suite")
         if canonical(stored) != canonical(plan):
@@ -1753,6 +1793,7 @@ class Session:
                           "status": final.get("status") if final is not None else "test_inconclusive",
                           "final_result": final, "case_frozen": case_frozen_flag})
         return {"case_count": len(cases), "cases": cases, "request_origin": self._request_origin,
+                "selfcheck": selfcheck,
                 "statuses": [case["status"] for case in cases]}
 
     # 功能：执行原计划步骤；参数 request 保持原字节，真实只读脚本失败后仅本例停止并以真实证据收口。
@@ -2269,8 +2310,11 @@ class Session:
         if permission not in self.target.permissions:
             raise EnvironmentBlocked("动作缺少相应显式业务/前置构造许可")
         self._command_id(request, "action", case_id)
-        if scope == "step" and any(record_data(self.state.commands[command_id]).get("scope") == "step" and record_data(self.state.commands[command_id]).get("index") == index for command_id in item.actions):
-            raise InputError("本例该原步骤动作已执行；换 ID 也不能重复消耗")
+        prior_actions: list[JsonObject] = [record_data(self.state.commands[command_id]) for command_id in item.actions
+            if scope == "step" and record_data(self.state.commands[command_id]).get("scope") == "step"
+            and record_data(self.state.commands[command_id]).get("index") == index]
+        if prior_actions and request.get("builtin") != "click_button":
+            raise InputError("本例该原步骤动作重复；只有不同内置按钮可继续必要交互")
         before_id: str = identifier(request["before_observation_id"], "before_observation_id")
         before: JsonObject | None = item.observations.get(before_id)
         if before is None or before.get("valid") is not True or before.get("target") != request["target"]:
@@ -2316,6 +2360,16 @@ class Session:
             source: JsonObject = object_value(object_value(before_command["script_original"], "before script")["source"], "before source")
             if source.get("kind") != "builtin_observation" or source.get("path") != "builtin:buttons":
                 raise InputError("内置点击只接受宿主生成的 builtin:buttons，不能采用手写伪同名值")
+            path: str = builtin_action_path(request)
+            row: JsonObject = builtin_button_row(path, before)
+            for prior_action in prior_actions:
+                prior_source: JsonObject = object_value(object_value(prior_action["script_original"], "prior script")["source"], "prior source")
+                if prior_source.get("kind") != "builtin_action" or prior_source.get("path") != "builtin:click_button":
+                    raise InputError("本例该原步骤动作重复；不能混用手写脚本继续同一步")
+                prior_path: str = text(object_value(prior_source["options"], "prior options")["path"], "prior path")
+                prior_row: JsonObject = builtin_button_row(prior_path, item.observations[str(prior_action["before_observation_id"])])
+                if path == prior_path or row["instance_id"] == prior_row["instance_id"] or row["node_instance_id"] == prior_row["node_instance_id"]:
+                    raise InputError("本例该原步骤按钮路径或实例重复；换 ID 不能重放")
             return builtin_button_click(object_value(request.get("builtin_options"), "builtin_options"), before)
         return None
     # 功能：通过共用的当前 before/guard/前置核验后发送一次动作；参数 request 不以回执作为产品断言。

@@ -1,6 +1,6 @@
 # 隔离验证
 
-<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-05；更新人：Codex；功能：维护回归入口与验证边界；参数：当前同包源码、临时假项目/包、内存目标或 loopback HTTP。历史验收流水原文保存在维护工程归档，不改写为新实测。 -->
+<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-09；更新人：Codex；功能：维护回归入口、通用业务夹具与验证边界；参数：当前同包源码、临时假项目/包、内存目标或loopback HTTP。历史验收流水保存在维护工程归档，不改写为新实测。 -->
 
 仅在修改宿主、模板或交付契约时读取；正常业务测试不先跑维护回归。隔离 = 在自有临时文件与测试回执中验证工具行为，不启动或连接 Unity/真实 Player，不调用生成服务、登录、GM 或上传。
 
@@ -32,6 +32,7 @@ py -3 -X utf8 -I -B scripts/cli.py delivery-verify
 | 自包含和语法 | [test_portable.py](../scripts/tests/test_portable.py)、[test_compatibility.py](../scripts/tests/test_compatibility.py)：8 模块、无导入副作用、阻断原工程的真实迁移、链接/模板、Python 3.10 文法 |
 | 生成C#与固定点击 | [test_builtin_visuals.py](../scripts/tests/test_builtin_visuals.py)：实际编译执行观测、返回投影和点击；验证原始视觉属性、委托/对象/预算拒绝、后代按钮、实例变化、交互状态和单次调用；仅自有控制台桩 |
 | 返回隔离与简洁输出 | [test_submission_repair.py](../scripts/tests/test_submission_repair.py)、[test_session.py](../scripts/tests/test_session.py)：可信只读错误隔离、下一例继续、动作/错误身份仍冻结、旧包装审计及CLI显示不改journal/退出码 |
+| 通用业务交互 | [test_flow_patterns.py](../scripts/tests/test_flow_patterns.py)：背包/设置必要交互、同路径/实例重复拒绝、结果反例、共享链路后合法准备及不放开未确认完成；现有计划格式和单JSON输出，不是实机业务验收 |
 | 交付和接入 | [test_delivery.py](../scripts/tests/test_delivery.py)、[test_gameclient_adapter.py](../scripts/tests/test_gameclient_adapter.py)：原依赖迁移、清单/ZIP、预算、原子发布、批准/备份、外部改动保护和可选适配边界 |
 | 包与长路径 | [test_package_empty_files.py](../scripts/tests/test_package_empty_files.py)、[test_windows_long_path_io.py](../scripts/tests/test_windows_long_path_io.py)：真实方法的空成员/长路径 I/O 与原拒绝边界 |
 | Unity 负载 | [test_unity_payload.py](../scripts/tests/test_unity_payload.py)、[test_gate_execution.py](../scripts/tests/test_gate_execution.py)：公共 API/编译分支及从真实源提取的门禁控制台桩，不是 Unity 完整编译 |

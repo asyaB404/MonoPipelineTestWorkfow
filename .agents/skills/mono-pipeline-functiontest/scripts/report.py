@@ -1,5 +1,5 @@
 """创建日期：2026-10-26；作者：Cyou。
-更新日期：2026-11-05；更新人：Codex；按冻结包装版本回算返回错误隔离与固定点击证据。
+更新日期：2026-11-09；更新人：Codex；回算同一步不同内置按钮的身份与不重放约束。
 功能：包内独立回算审计、writer 计时校验与唯一固定 Markdown 报告。
 参数：本轮 journal 及明确父上下文；统计只来自本轮唯一 final，不联网/操作 Player。
 """
@@ -21,7 +21,7 @@ from .evidence import (
 )
 from .inputs import OriginalCase, case_index, verify_workflow
 from .pipeline import EvalReceipt, observed_value, wrap_script, wrapper_format
-from .session import CONTROL_CASE, CaseState, Session, builtin_button_click, case_coverage
+from .session import CONTROL_CASE, CaseState, Session, builtin_button_click, builtin_button_row, case_coverage
 
 INTENT_FIELDS = frozenset({"command_id", "mode", "scope", "index", "original_text", "target", "value_format", "purpose",
                            "observation_id", "after_command_id", "covers_step", "reason", "read_only_review",
@@ -139,6 +139,24 @@ def _audit_intent(session: Session, record: JsonObject) -> None:
             raise IntegrityError("内置点击绑定的按钮身份或状态不完整") from None
         if raw != expected_action:
             raise IntegrityError("内置点击源码不等于原 before 派生的单次调用")
+    if data["scope"] == "step":
+        for command_id in item.actions:
+            prior_record: JsonObject = session.state.commands[command_id]
+            prior: JsonObject = record_data(prior_record)
+            if record_int(prior_record, "seq") >= record_int(record, "seq") or prior["scope"] != "step" or prior["index"] != data["index"]:
+                continue
+            prior_source: JsonObject = object_value(object_value(prior["script_original"], "prior script")["source"], "prior source")
+            if any(value.get("kind") != "builtin_action" or value.get("path") != "builtin:click_button" for value in (source, prior_source)):
+                raise IntegrityError("同一原步骤重复动作不能混用手写脚本")
+            current_path: str = text(object_value(source["options"], "click options")["path"], "click path")
+            prior_path: str = text(object_value(prior_source["options"], "prior options")["path"], "prior path")
+            try:
+                current_row: JsonObject = builtin_button_row(current_path, before)
+                prior_row: JsonObject = builtin_button_row(prior_path, item.observations[str(prior["before_observation_id"])])
+            except InputError:
+                raise IntegrityError("同一步多次交互缺少原按钮身份") from None
+            if current_path == prior_path or current_row["instance_id"] == prior_row["instance_id"] or current_row["node_instance_id"] == prior_row["node_instance_id"]:
+                raise IntegrityError("同一原步骤重复调用相同按钮路径或实例")
     guards: JsonValue = data["guard_comparison_ids"]
     if not isinstance(guards, list) or not guards:
         raise IntegrityError("动作没有独立业务守卫")

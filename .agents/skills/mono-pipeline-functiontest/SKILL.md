@@ -1,11 +1,11 @@
 ---
 name: mono-pipeline-functiontest
-description: 为 functiontest-workflow 提供已构建 Windows Mono Development PC 包执行，也支持直接调用。复用项目内现有来源/用例及公共子技能，准备单一 Player，批量执行、留证并生成唯一报告；父 Workflow 不修改。Python 3.10+ 标准库宿主，不构建、不重启、不调用 Unity MCP，不自动登录、发 GM 或上传。
+description: 为 functiontest-workflow 提供已构建 Windows Mono Development PC 包执行，也支持直接调用。复用现有用例及公共子技能，按真实初态组织批次，准备单一Player并执行、留证、报告；父Workflow不修改。Python 3.10+标准库宿主，不构建、不默认重启、不调用Unity MCP，不自动登录、发GM或上传。
 ---
 
 # Mono Pipeline 功能测试
 
-<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-06；更新人：Codex；功能：父流程协作与直接调用的 PC 包测试入口；参数：完整原用例、包目标、授权、输出根及已有父上下文。本次30秒启动预算和固定登录精简归属Codex，历史实现与建议归属CyouCode；父Workflow保持原样。 -->
+<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-09；更新人：Codex；功能：父流程协作与通用业务执行入口；参数：完整原用例、包目标、授权、输出根及已有父上下文。本次状态调度、通用交互与轻量预检归属Codex，历史实现归属CyouCode；父Workflow保持原样。 -->
 
 宿主 = 包外 Python 执行工具；Player = 已构建的 Unity 游戏进程；journal = 本轮不可变证据记录。仅支持 Mono Development，不证明 IL2CPP、AOT、裁剪或热更兼容。
 
@@ -25,6 +25,8 @@ description: 为 functiontest-workflow 提供已构建 Windows Mono Development 
 2. 实际执行先查明确 EXE 是否已运行：存在则复用，否则由当前 Agent 自主启动 Player，不再要求用户手动启动。按确认的工作目录/测试开关启动，就绪只读轮询默认总预算30秒：立即检查，就绪即继续，不固定休眠、不自动延长；用户明确指定预算时沿用。失败停止，不杀死、不重启、不启动第二实例。此预算仅供启动就绪检查，不改连接或业务动作超时。仅离线准备时不启动、不附加、不生成冒充测试完成的正式报告。
 3. `output-check` 后 `init`，使用返回的新本轮根 `attach`。已有父上下文时传实际 `--workflow-timing`、`--workflow-parent-id`、`--workflow-child-id`，使用同一功能前缀 `--run-prefix`，不重建父；直接调用使用自身计时。父流程中的编辑器编译/PlayMode/测试执行由本技能的 PC 链路承接，其他公共阶段按需复用；见协作契约。静态准备或启动成功不等于附加成功。
 
+初始化前先安排初态：零资源/边界/计次初态先测，按需要最少补充，不统一加大量资源。用户已批准换号时，可在安全边界选择新账号、重新核验真实目标；未知动作不恢复，旧轮目标不改写。首次组织业务批次先读[通用业务执行](references/business-execution.md)，换号不是每例固定步骤。
+
 不伪造 PID/描述符，不自造许可证，不默认接受或扩大权限；内部迁移许可不等于运行或账号操作授权。附加、脚本读取、业务/准备动作、日志及截图分别按真实许可执行；登录、账号选择或资源构造不自动授权。令牌仅在内存认证头使用，不写命令行、报告或交付；不外挂保活或默认关闭自检。
 
 ## 阶段 3：正常执行路径
@@ -36,16 +38,16 @@ description: 为 functiontest-workflow 提供已构建 Windows Mono Development 
 | 操作 | 使用方式 |
 | --- | --- |
 | 构造计划 | 沿用 [case-suite.json](assets/templates/case-suite.json)，每例 `start-case` 开始、唯一 `final` 收尾；按真实前置、资源及结果依赖分批 |
-| 本地预检 | `plan-check` 排除原文/索引、基线、脚本及引用错误；不接触 Player、不登记草稿、不消耗命令 ID |
+| 本地预检 | `plan-check` 检查原文/引用，并查看`planning_summary`的无业务验证路径及前置字段绑定；不接触Player、不登记草稿 |
 | 执行 | 优先 `run-suite`，单例 `run-case`；现场分支才用单步探索，稳定后回到批处理，不另写执行器或草稿格式 |
 
 相同机械字段用 `defaults`，常规读取用 `builtin`，已审定机械断言用 `rule`；特殊语义用完整 `basis`。预期取需求精确 `literal` 或独立配置 `baseline`，不从 UI 实际值反推，不采用脚本自述通过。
 
-旧生成器先查固定未定论列表、假覆盖和依赖顺序。已读配置直接从有效观察文件登记基线，不把未登记误称运行端无能力；颜色/图片原值用 `chain/subtree`。字段和登记方法见宿主契约。
+按当前状态生成可执行路径，不复制旧生成器的固定收口名单。共享链路关闭后，仍可用本例合法前置构造；跨例复用结果状态须本例重验，配置基线沿已有接口登记。
 
 `covers_step=true` 仅覆盖确实完成的原只读步骤；原点击、抽取等必须有真实 `action`。拟 `passed` 的全部原索引须完整，`blocked` 保留未执行步骤，不补重复读取；静态通过不证明语义等价。逐例重查资源与前置，不能假定批间状态隔离，必须先完成真实操作再验证其结果页。
 
-原步骤要求完成后核对时，观察关联本例最后动作，设 `poll.require_match=true`，等待真实完成信号和最后确认帧。页面存在不代替展示完成；未确认时批计划跳过后续动作/断言，保留未定论及已有失败。单步查 `poll_matched/status.completion_pending`，仅可新 ID 只读确认，不重发动作。
+先读阶段，完成必要交互，再用`poll.require_match=true`确认原要求的最终完成；不先等待必须点击才能到达的终态。原步骤可包含不同内置按钮的顺序交互，同路径或实例不重发。结果比较关联最后动作后的独立新帧；未确认时真实收口或只读确认，不重发动作。原文没要求关页时不把清理加成通过条件。
 
 补交前读 `status`，先收口活动例，再选择 `remaining_case_ids` 中从未开始的用例；不重开已有 final。同一 ID 永不重放，已登记计划/请求/基线不改写；单步草稿可用 `request-check`、`request-publish` 检查后发布新文件。
 

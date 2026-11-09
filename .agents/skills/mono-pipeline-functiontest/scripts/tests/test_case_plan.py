@@ -320,8 +320,8 @@ class CasePlanTests(unittest.TestCase):
                         session.invoke_suite(suite, path)
         self.assertEqual(fixture.world.action_count, 0)
 
-    # 功能：批量执行前把每条不确定/阻塞理由与事实支撑打印出来；参数 self 为测试实例。
-    def test_suite_prints_reason_selfcheck_before_execution(self) -> None:
+    # 功能：批量执行结构化返回原自检，不在正式CLI的JSON前插入普通文本；参数self为测试实例。
+    def test_suite_returns_reason_selfcheck_without_extra_stdout(self) -> None:
         fixture: Fixture = self.two_case_fixture()
         first: str = fixture.original.cases[0].case_id
         body: JsonObject = self.case_plan(fixture, first, include_final=False, suffix="-a")
@@ -332,8 +332,9 @@ class CasePlanTests(unittest.TestCase):
         path: Path = fixture.write_json("suite-selfcheck.json", suite)
         output: io.StringIO = io.StringIO()
         with fixture.session() as session, contextlib.redirect_stdout(output):
-            session.invoke_suite(suite, path)
-        printed: str = output.getvalue()
+            result: JsonObject = session.invoke_suite(suite, path)
+        self.assertEqual(output.getvalue(), "")
+        printed: str = "\n".join(str(line) for line in cast(list[JsonValue], result["selfcheck"]))
         self.assertIn("[自检]", printed)
         self.assertIn("insufficient_observation", printed)
         self.assertIn("已读取但缺少目标字段", printed)
@@ -351,7 +352,7 @@ class CasePlanTests(unittest.TestCase):
                 "read_only_review": "当前 Agent 审核：本片段只返回业务字段",
                 "reason": "依据当前字段动态定位，不是预制动作映射", "covers_step": False}
 
-    # 功能：整批无动作时打印批级告警，暴露「可执行却全部收口」的误判；参数 self 为测试实例。
+    # 功能：整批无动作时在结构化返回保留批级告警；参数self为测试实例。
     def test_suite_warns_when_batch_has_no_action_step(self) -> None:
         case: JsonObject = {"case_id": "W-1", "title": "带前置的只读例",
                             "preconditions": ["卡池已解锁"], "steps": ["读取当前计数"],
@@ -375,8 +376,9 @@ class CasePlanTests(unittest.TestCase):
         path: Path = fixture.write_json("suite-warn.json", suite)
         output: io.StringIO = io.StringIO()
         with fixture.session() as session, contextlib.redirect_stdout(output):
-            session.invoke_suite(suite, path)
-        printed: str = output.getvalue()
+            result: JsonObject = session.invoke_suite(suite, path)
+        self.assertEqual(output.getvalue(), "")
+        printed: str = "\n".join(str(line) for line in cast(list[JsonValue], result["selfcheck"]))
         self.assertIn("本批 0 个 action 步骤", printed)
         self.assertIn("note=1", printed)
         self.assertIn("未留 note 的用例=[]", printed)
@@ -403,8 +405,9 @@ class CasePlanTests(unittest.TestCase):
         path: Path = fixture.write_json("suite-nonote.json", suite)
         output: io.StringIO = io.StringIO()
         with fixture.session() as session, contextlib.redirect_stdout(output):
-            session.invoke_suite(suite, path)
-        printed: str = output.getvalue()
+            result: JsonObject = session.invoke_suite(suite, path)
+        self.assertEqual(output.getvalue(), "")
+        printed: str = "\n".join(str(line) for line in cast(list[JsonValue], result["selfcheck"]))
         self.assertIn("本批 0 个 action 步骤", printed)
         self.assertIn(f"未留 note 的用例=['{case_id}']", printed)
 

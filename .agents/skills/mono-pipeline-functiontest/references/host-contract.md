@@ -1,6 +1,6 @@
 # 宿主执行契约
 
-<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-05；更新人：Codex；功能：公共命令、计划、比较、链路及证据约束；参数：完整原输入、目标、权限、本轮根与请求。历史实施/验收流水移出日常契约，原作者归属不变。 -->
+<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-09；更新人：Codex；功能：公共命令、轻量计划概况与顺序按钮交互；参数：完整原输入、目标、权限、本轮根与请求。历史实施/验收流水移出日常契约，原作者归属不变。 -->
 
 从 Skill 根使用 [mono-pipeline-test.bat](../mono-pipeline-test.bat) 或 `py -3 -I -B scripts/cli.py`，最低 Python 3.10。Agent 常规调用在子命令前加 `--compact`，如 `scripts/cli.py --compact observe --run ... --request ...`；默认仍完整输出。简洁模式仅省有效观察的重复信封与中间轮询值，保留每个样本的 ID/帧/引用、最终实际值、错误、状态和退出码；journal 与审计原值不变。材料与来源按[主入口](../SKILL.md)，所有会话操作复用 [session.py](../scripts/session.py)。
 
@@ -58,7 +58,9 @@
 
 基线先登记后引用，可跨批内用例复用但不重复登记同 ID；预检读取原 JSON 并验摘要。未来/未登记基线，以及同一观察、同一原前置、同字段的互斥等值比较均拒绝；合法 setup 后的新观察允许状态不同。登录与功能解锁等不同事实分别绑定，不能借同一原句代替。
 
-`plan-check` 不建连、不登记来源、不写 `cli_begin/cli_result`、不消耗命令 ID、不冻结本轮；静态通过不证明语义、守卫或产品通过。执行器先登记计划原字节/摘要，每步仍留真实事件及计划索引。`run-suite` 复用一次连接，省去重复 CLI/身份/全包摘要开销，不隔离 Player 业务状态；按依赖拆批，逐例重新观察前置和资源，不预填整组未定论。
+`plan-check` 不建连、不登记来源、不写 `cli_begin/cli_result`、不消耗命令 ID、不冻结本轮；静态通过不证明语义、守卫或产品通过。返回`planning_summary`中的拟状态分布、动作例、无action且无原预期比较的`terminal_only_case_ids`、只读/动作步骤索引及前置原文到字段/依据的绑定；纯只读或真实阻塞可合法无动作，汇总不作判定，也不猜字段语义。
+
+执行器先登记计划原字节/摘要，每步仍留真实事件及计划索引。`run-suite` 复用一次连接，省去重复 CLI/身份/全包摘要开销，不隔离 Player 业务状态；按依赖拆批，逐例重新观察前置和资源，不预填整组未定论。批自检在返回JSON的`selfcheck`内，不在JSON前打印普通文本。状态安排、合法准备及阶段交互见[通用业务执行](business-execution.md)。
 
 `status.remaining_case_ids` 仅含从未开始的原例，`current_case` 是活动例，`finals` 是已收口结果。补交先处理活动例，再选未开始例；不另维护 DONE 表、不重开已有 final。已开始/活动/收口用例的开始计划在登记前拒绝，关闭/冻结轮不续行，不为旧动作换 ID 重放。
 
@@ -73,6 +75,8 @@
 沿用 [action.json](../assets/templates/action.json)，不另写点击 C#：先 `builtin:buttons`，可用 `root/name_contains` 缩小范围，选返回行中的实际 `path`，不能拿父容器代替。每行含 `component_type/instance_id/node_instance_id/button_count/enabled/interactable/effective_interactable/click_method`；`truncated=true`、路径/组件歧义、缺失或不可交互时拒绝生成动作。实例 ID 为真实非零 Int32，允许负数。
 
 原 action 仅新增 `builtin="click_button"` 和 `builtin_options={"path":"实际完整节点路径"}`，与 `script` 互斥，格式为 json。before 必须是本例同目标最新、有效且由宿主生成的 buttons，独立守卫和原前置仍须通过。宿主从 before 派生组件/实例，发送时再次核对，GameButton 优先且只调用一次公开 `InvokeOnClickListener`；仅标准按钮则使用其公开事件。观察不调用会更新点击间隔的私有方法，不同时触发两条接口。返回 `method_called` 只记录方法调用，业务结果仍须动作后新帧独立比较。
+
+原步骤包含多次必要界面交互时，可同一索引依次调用不同完整按钮路径，每个动作单独before/guard/新帧；不扩写原文、不等于可重复交易。静态拒同路径或混用手写脚本；运行期及审计还拒同组件/节点实例通过不同路径重发。相同路径的循环不支持此入口，不更换ID绕过。手写脚本同一步仍只允许一次；原完成未确认、权限/身份/前置门禁不变。
 
 JSON Pointer = 实际结构值的字段路径。每条 [compare](../assets/templates/compare.json) 绑定原范围/索引/完整文本、步骤索引、观察 ID/字段、规则、独立依据和真实语义审阅。观察必须同例/构建/目标、无业务错误；动作后比较绑定本例最后动作后的独立新帧，不用动作回执。
 
