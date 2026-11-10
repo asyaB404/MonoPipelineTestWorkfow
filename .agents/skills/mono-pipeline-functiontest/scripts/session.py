@@ -1,5 +1,5 @@
 """创建日期：2026-10-26；作者：Cyou。
-更新日期：2026-11-09；更新人：Codex；通用计划概况及同一步内不同按钮的必要交互。
+更新日期：2026-11-10；更新人：Codex；收窄交互步骤识别，避免只读业务名词阻断计划。
 功能：持久逐条主动会话、合法前置/一次动作/新帧读取、原预期比较和唯一四状态 final。
 参数：完整用例、显式目标/权限、每次当前 Agent 的新请求；不包含模型服务或静态全集计划。
 """
@@ -55,13 +55,26 @@ SUITE_STEP_LIMIT = 4096
 # 不替代任何原文绑定、字段选择、操作符或独立预期，也不改变门禁。缺失字段才补，已写字段不被覆盖。
 PLAN_DEFAULT_KEYS = frozenset({"send", "target", "value_format", "timeout_ms", "read_only_review",
                                "target_review", "reason"})
-# 原步骤含明确交互动词时，读取不能代替动作覆盖；描述已打开/已关闭状态不自动视为交互。
+# 原步骤含明确交互动词时，读取不能代替动作覆盖；业务数量/状态名词不单独视为交互。
 ACTION_STEP_PATTERN = re.compile(
-    r"点击|点按|单击|双击|长按|拖动|滑动|选择|切换|提交|领取|抽取|祈愿|升级|购买|保存|使用|激活|兑换|装备|启动|触发|执行|"
+    r"点击|点按|单击|双击|长按|拖动|滑动|选择|切换|提交|领取|升级|购买|保存|使用|兑换|装备|启动|"
     r"(?:^|[，,。；;]|并|然后|再|随后|接着|入口|按钮|页签|选项卡|功能|面板|页面|界面)\s*"
     r"(?:输入|打开|进入|退出|关闭|返回|前往|导航到|跳转到|切换到)|"
-    r"\b(?:click|tap|press|drag|swipe|type|select|choose|toggle|switch|submit|claim|draw|pull|upgrade|purchase|save|use|activate|redeem|equip|trigger|perform|execute)\b|"
+    r"\b(?:click|tap|press|drag|swipe|type|select|choose|toggle|switch|submit|claim|upgrade|purchase|save|use|activate|redeem|equip|trigger)\b|"
     r"(?:^|[.;,]|\bthen\b|\band\b)\s*(?:input|enter|exit|open|close|return|navigate|switch to)\b",
+    re.IGNORECASE,
+)
+CONTEXTUAL_ACTION_STEP_PATTERN = re.compile(
+    r"(?:执行|进行|发起|开始|触发)\s*(?:一次|单次|一轮)?(?:达到保底的)?(?:抽卡|抽取|祈愿|单抽|十连)|"
+    r"(?:激活|启用)(?:目标|对应|该)?(?:功能|技能|账号|道具|入口|按钮)|"
+    r"\b(?:perform|execute)\s+(?:one|a|an|single|ten)?\s*(?:draw|pull|gacha|wish)\b|"
+    r"\b(?:draw|pull)\s+(?:once|one|ten|a single|a ten-pull)\b",
+    re.IGNORECASE,
+)
+NEGATED_ACTION_PREFIX_PATTERN = re.compile(
+    r"(?:并未|没有|无需|无须|不再|不要|不得|禁止|不能|不可|未曾|可以|可|不|未|没)"
+    r"(?:(?:应该|需要|再|继续|进行|执行|发起|触发|任何|重复|主动|直接|操作|做){0,2})$"
+    r"|(?:do not|does not|did not|never|without|not)\s*(?:(?:need to|have to|continue to|perform|execute)\s*){0,2}$",
     re.IGNORECASE,
 )
 NAVIGATION_ACTION_PATTERN = re.compile(
@@ -72,7 +85,12 @@ NAVIGATION_ACTION_PATTERN = re.compile(
 
 # 功能：判断原步骤是否明确要求交互；参数 value 为原文，不从预期或字段名推断动作。
 def step_requires_action(value: str) -> bool:
-    return ACTION_STEP_PATTERN.search(value) is not None
+    for pattern in (ACTION_STEP_PATTERN, CONTEXTUAL_ACTION_STEP_PATTERN):
+        for match in pattern.finditer(value):
+            prefix: str = value[max(0, match.start() - 24):match.start()]
+            if NEGATED_ACTION_PREFIX_PATTERN.search(prefix) is None:
+                return True
+    return False
 # 每个 operation 允许从计划级 defaults 继承的字段；未登记的操作不继承任何字段（compare/final 必须逐条判断）。
 STEP_DEFAULT_FIELDS: dict[str, frozenset[str]] = {
     "observe": frozenset({"send", "target", "value_format", "timeout_ms", "read_only_review", "reason"}),
