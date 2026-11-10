@@ -21,7 +21,7 @@
 | 运行记录 | 每个 Session 新建独立 journal，并对单个 journal 使用独占 writer 锁 | 每个 lane 独立 journal；新增 coordinator 汇总多个 lane |
 | 外部工作流 | 一个 Mono 技能执行对应一个父 Workflow 子计时与最终报告 | 多实例作为同一次 Mono 调用的内部 lane；父 Workflow 不增加或改写子计时记录 |
 
-相关实现：[`SKILL.md`](../.agents/skills/mono-pipeline-functiontest/SKILL.md:25)、[`session.py`](../.agents/skills/mono-pipeline-functiontest/scripts/session.py:1902)、[`GlobalMonoPipelineTest.cs`](../.agents/skills/mono-pipeline-functiontest/assets/unity/GlobalMonoPipelineTest.cs:47)、[`inputs.py`](../.agents/skills/mono-pipeline-functiontest/scripts/inputs.py:290)、[`pipeline.py`](../.agents/skills/mono-pipeline-functiontest/scripts/pipeline.py:362)、[`RuntimePipelineServer.cs`](../Packages/com.unity.pipeline/Runtime/PlayerSupport/RuntimePipelineServer.cs:31)、[`GlobalMonoPipelineGameClientBuild.cs`](../Assets/Editor/ClientEditor/GlobalMonoPipelineGameClientBuild.cs:56)。
+相关实现：[`SKILL.md`](../../.agents/skills/mono-pipeline-functiontest/SKILL.md:25)、[`session.py`](../../.agents/skills/mono-pipeline-functiontest/scripts/session.py:1902)、[`GlobalMonoPipelineTest.cs`](../../.agents/skills/mono-pipeline-functiontest/assets/unity/GlobalMonoPipelineTest.cs:47)、[`inputs.py`](../../.agents/skills/mono-pipeline-functiontest/scripts/inputs.py:290)、[`pipeline.py`](../../.agents/skills/mono-pipeline-functiontest/scripts/pipeline.py:362)、[`RuntimePipelineServer.cs`](../../Packages/com.unity.pipeline/Runtime/PlayerSupport/RuntimePipelineServer.cs:31)、[`GlobalMonoPipelineGameClientBuild.cs`](../../Assets/Editor/ClientEditor/GlobalMonoPipelineGameClientBuild.cs:56)。
 
 ## 3. 推荐结构
 

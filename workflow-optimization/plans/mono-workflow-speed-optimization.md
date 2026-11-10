@@ -8,7 +8,7 @@
 
 ## 当前证据
 
-归档摘要位于 [logs/mono-pipeline](../logs/mono-pipeline/README.md)，摘要由 Codex 整理，源实机日志由 Cyou 撰写；本地 PID 和输出路径已省略，GameClient 中的原始日志不修改。
+归档摘要位于 [Mono Pipeline 测试日志](../test-logs/mono-pipeline/README.md)，摘要由 Codex 整理，源实机日志由 Cyou 撰写；本地 PID 和输出路径已省略，GameClient 中的原始日志不修改。
 
 - 2026-11-06-3：48 例全部收口，用时 2283.720 秒，passed 5、failed 1、blocked 28、test_inconclusive 14。账号已有抽取历史且遗留多个覆盖层，适合作为历史质量参照，不是可直接等价的速度基线。
 - 2026-11-09 r15：48 例全部收口，用时 750.756 秒，passed 1、blocked 23、test_inconclusive 24。日志记录 16 条计时告警，最长 226.234 秒出现在两批 run-suite 之间；47 例重复使用 922 行全量事实脚本，证据约 7.2 MB。账号功能未解锁，不能据此评价同条件下的 passed 变化。
