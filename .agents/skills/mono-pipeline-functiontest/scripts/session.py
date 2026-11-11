@@ -57,7 +57,7 @@ PLAN_DEFAULT_KEYS = frozenset({"send", "target", "value_format", "timeout_ms", "
                                "target_review", "reason"})
 # 原步骤含明确交互动词时，读取不能代替动作覆盖；业务数量/状态名词不单独视为交互。
 ACTION_STEP_PATTERN = re.compile(
-    r"点击|点按|单击|双击|长按|拖动|滑动|选择|切换|提交|领取|升级|购买|保存|使用|兑换|装备|启动|"
+    r"点击|点按|单击|双击|长按|拖动|滑动|选择(?!态|状态|情况|结果|标识|字段|属性|的(?:棋子|角色|道具|单位))|切换|提交|领取|升级|购买|保存|使用|兑换|装备|启动|"
     r"(?:^|[，,。；;]|并|然后|再|随后|接着|入口|按钮|页签|选项卡|功能|面板|页面|界面)\s*"
     r"(?:输入|打开|进入|退出|关闭|返回|前往|导航到|跳转到|切换到)|"
     r"\b(?:click|tap|press|drag|swipe|type|select|choose|toggle|switch|submit|claim|upgrade|purchase|save|use|activate|redeem|equip|trigger)\b|"

@@ -695,6 +695,9 @@ class PlanCheckTests(unittest.TestCase):
         self.assertFalse(step_requires_action("读取祈愿1次按钮的可点击状态"))
         self.assertFalse(step_requires_action("在逐条奖励展示时不执行点击"))
         self.assertFalse(step_requires_action("读取目标功能是否已激活"))
+        self.assertFalse(step_requires_action("检查棋子库选择态"))
+        self.assertFalse(step_requires_action("读取当前选中状态及对应棋子"))
+        self.assertTrue(step_requires_action("检查选中态后选择一枚棋子"))
         source: JsonObject = {"case_id": "ACTION-1", "title": "Feature entry",
             "preconditions": [], "steps": ["从主界面卡池入口进入抽卡面板并核对标题"],
             "expected": ["抽卡面板标题正确"]}

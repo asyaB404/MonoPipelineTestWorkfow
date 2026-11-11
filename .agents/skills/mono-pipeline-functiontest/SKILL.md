@@ -5,7 +5,7 @@ description: 为 functiontest-workflow 提供已构建 Windows Mono Development 
 
 # Mono Pipeline 功能测试
 
-<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-09；更新人：Codex；功能：父流程协作与通用业务执行入口；参数：完整原用例、包目标、授权、输出根及已有父上下文。本次状态调度、通用交互与轻量预检归属Codex，历史实现归属CyouCode；父Workflow保持原样。 -->
+<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-11；更新人：Codex；功能：父流程协作与通用业务执行入口；参数：完整原用例、包目标、授权、输出根及已有父上下文。本次交互识别修复、请求来源防错和跨阶段观察建议归属Codex，历史实现归属CyouCode；父Workflow保持原样。 -->
 
 宿主 = 包外 Python 执行工具；Player = 已构建的 Unity 游戏进程；journal = 本轮不可变证据记录。仅支持 Mono Development，不证明 IL2CPP、AOT、裁剪或热更兼容。
 
@@ -43,15 +43,19 @@ description: 为 functiontest-workflow 提供已构建 Windows Mono Development 
 | 本地预检 | `plan-check` 检查原文/引用，并查看`planning_summary`的无业务验证路径、必需动作/缺失动作索引及前置字段绑定；不接触Player、不登记草稿 |
 | 执行 | 优先 `run-suite`，单例 `run-case`；现场分支才用单步探索，稳定后回到批处理，不另写执行器或草稿格式 |
 
+稳定状态组在首个业务动作前完成整组`plan-check`，再尽量由同一`run-suite`连续执行，避免逐操作重启CLI。单步流程优先在活动用例中直接`request-publish`并执行返回的唯一文件；该命令已内含`request-check`，不要无变更地再单独跑一次。需要诊断时才单独`request-check`；发布/登记后不改写原文件，修正须用新文件和新ID。长批次使用后台/异步执行并轮询既有输出；等待超时先查原run的`status`，仅在无未决intent且会话未冻结时续跑`remaining_case_ids`，不得因终端超时重建run或重放动作。具体状态与脚本规则见[通用业务执行](references/business-execution.md)。
+
 相同机械字段用 `defaults`，常规读取用 `builtin`，已审定机械断言用 `rule`；特殊语义用完整 `basis`。预期取需求精确 `literal` 或独立配置 `baseline`，不从 UI 实际值反推，不采用脚本自述通过。
 
 按当前状态生成可执行路径，不复制旧生成器的固定收口名单。共享链路关闭后，仍可用本例合法前置构造；跨例复用结果状态须本例重验，配置基线沿已有接口登记。
 
 `covers_step=true` 不能替代明确要求的交互；原文明确要求的点击、进入、抽卡操作等必须先有对应真实 `action`，动作后的新帧读取才可继续用于覆盖和核对。抽取/祈愿次数、结果条数、执行结果及激活状态等业务名词本身不构成交互要求；`plan-check` 的动作索引是静态提示，仍须按原句语义审核。拟 `passed` 的全部原索引须完整，`blocked` 保留未执行步骤，不补重复读取；静态通过不证明语义等价。逐例重查资源与前置，不能假定批间状态隔离，必须先完成真实操作再验证其结果页。
 
+一个用例若先后验证不同界面状态，按每个阶段的真实动作分别执行`action → 新帧observe → 对该帧全部compare → 下一action`；同一阶段的多项预期可共享一次observe，不能拿最后阶段的快照证明前一阶段状态。只读步骤如“检查选择态/选中状态”不代表选择动作，仍依据原句谓语判断。
+
 先读阶段，完成必要交互，再用`poll.require_match=true`确认原要求的最终完成；不先等待必须点击才能到达的终态。原步骤可包含不同内置按钮的顺序交互，同路径或实例不重发。结果比较关联最后动作后的独立新帧；未确认时真实收口或只读确认，不重发动作。原文没要求关页时不把清理加成通过条件。
 
-补交前读 `status`，先收口活动例，再选择 `remaining_case_ids` 中从未开始的用例；不重开已有 final。同一 ID 永不重放，已登记计划/请求/基线不改写；单步草稿可用 `request-check`、`request-publish` 检查后发布新文件。
+补交前读 `status`，先收口活动例，再选择 `remaining_case_ids` 中从未开始的用例；不重开已有 final。同一 ID 永不重放，已登记计划/请求/基线不改写；单步默认用`request-publish`完成校验和发布，需要诊断时才单独`request-check`。
 
 ## 判定与停止
 

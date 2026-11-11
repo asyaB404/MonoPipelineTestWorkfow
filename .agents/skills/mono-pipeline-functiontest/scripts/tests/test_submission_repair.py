@@ -188,6 +188,28 @@ class SubmissionRepairTests(unittest.TestCase):
             one.write_bytes(canonical({**request, "original_text": "登记后改写"}))
             self.assertTrue(session.invoke("status", {})["frozen"])
 
+    # Codex: catch a premature action binding in request-check/publish before any request source is registered.
+    def test_request_preflight_rejects_after_command_without_prior_action(self) -> None:
+        fixture: Fixture = self.fixture([readonly_case("R-1")])
+        request: JsonObject = {"command_id": "read-initial", "observation_id": "initial-observation",
+            "script": str(fixture.script("read-initial")), "scope": "step", "index": 1,
+            "original_text": fixture.original.case("R-1").item("step", 1).text,
+            "purpose": "step", "after_command_id": "action-not-yet-issued", "target": fixture.world.target,
+            "read_only_review": "隔离夹具：只读取当前计数", "reason": "验证初始读取不可绑定尚未执行的动作"}
+        with fixture.session() as session:
+            session.invoke("attach", {})
+            session.invoke("start-case", {"case_id": "R-1"})
+            journal_records: int = len(session.journal.records)
+            evaluations: int = fixture.world.eval_count
+            with self.assertRaisesRegex(InputError, "不存在的动作"):
+                session.check_request("observe", request)
+            with self.assertRaisesRegex(InputError, "不存在的动作"):
+                session.publish_request("observe", request, fixture.root / "published")
+            self.assertEqual(len(session.journal.records), journal_records)
+            self.assertEqual(fixture.world.eval_count, evaluations)
+            self.assertFalse((fixture.root / "published").exists())
+            self.assertFalse(any(record["event"] == "request_registered" for record in session.journal.records))
+
     # 功能：守卫引用旧 before 时在普通请求登记前拒绝，不触发动作；参数 self 精确复现登录链路错绑。
     def test_current_guard_mismatch_is_rejected_before_request_registration(self) -> None:
         fixture: Fixture = self.fixture()
