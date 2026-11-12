@@ -396,7 +396,7 @@ class SubmissionRepairTests(unittest.TestCase):
         chain: str = builtin_observation("chain", {"root": "Root/UI"}).decode("utf-8")
         self.assertIn('"GameButton"', buttons)
         self.assertIn('"m_MonoInvocationAdapter"', logic)
-        self.assertIn("__inst.GetType()", logic)
+        self.assertIn("__owner.GetType()", logic)
         self.assertIn('"instance_count"', logic)
         self.assertIn("__path(__t)", chain)
         for body in (buttons, logic, chain):

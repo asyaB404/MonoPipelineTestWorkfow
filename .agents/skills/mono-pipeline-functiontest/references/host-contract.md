@@ -1,6 +1,6 @@
 # 宿主执行契约
 
-<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-09；更新人：Codex；功能：公共命令、轻量计划概况与顺序按钮交互；参数：完整原输入、目标、权限、本轮根与请求。历史实施/验收流水移出日常契约，原作者归属不变。 -->
+<!-- 创建日期：2026-10-26；作者：Cyou；更新日期：2026-11-12；更新人：Codex；功能：公共命令、成员观察、计划及顺序按钮交互；参数：完整原输入、目标、权限、本轮根与请求。历史实施/验收流水移出日常契约，原作者归属不变。 -->
 
 从 Skill 根使用 [mono-pipeline-test.bat](../mono-pipeline-test.bat) 或 `py -3 -I -B scripts/cli.py`，最低 Python 3.10。Agent 常规调用在子命令前加 `--compact`，如 `scripts/cli.py --compact observe --run ... --request ...`；默认仍完整输出。简洁模式仅省有效观察的重复信封与中间轮询值，保留每个样本的 ID/帧/引用、最终实际值、错误、状态和退出码；journal 与审计原值不变。材料与来源按[主入口](../SKILL.md)，所有会话操作复用 [session.py](../scripts/session.py)。
 
@@ -66,9 +66,24 @@
 
 ## 观察与独立比较
 
-常规读取用现有 `builtin`，与手写 `script` 互斥：`chain` 读根/节点，`subtree` 指定 `root`，`buttons` 枚举按钮，`logic_field` 指定 `logic_type/field`。节点预算、深度及参数由 [builtin_observation](../scripts/session.py) 校验。完整场景路径和自定义按钮均可观察；热更字段从真实实例及继承链读取，多个候选不取第一项，复杂值不伪装字符串，缺对象/字段不补零或假值。
+常规读取用 `builtin`，与手写 `script` 互斥：`chain` 读根/节点，`subtree` 指定 `root`，`buttons` 枚举按钮；业务成员按下节读取。节点预算、深度及参数由 [builtin_observation](../scripts/session.py) 校验，不增加CLI命令或包内依赖。
 
 `chain/subtree` 的节点保留完整 `path`，有对应控件且可读时另返回 `text_color_rgb/text_color_rgba`、`image_color_rgb/image_color_rgba`（小写、无 `#` 的 6/8 位色值）和 `sprite_name`（真实 Sprite.name，不裁剪或推断资源 ID）。同时支持标准控件与 `GameText/GameImage` 公共属性；失败/缺失不补颜色或名称，原生 Image 未加载图片时名称为 null。这些是组件原值，不是最终渲染像素或资源唯一身份；按当前控件路径及独立配置逐项比较。
+
+### 成员读取
+
+Codex 2026-11-12：使用同一个 `observe` 请求及原守卫/新帧规则，优先取代临时手写反射；getter = 属性读取函数，执行前仍须核对被选getter无业务副作用。
+
+| builtin | builtin_options | 返回 |
+| --- | --- | --- |
+| `logic_field` | `logic_type`、`field`，可选`root` | 保留旧`value/found/readable/instance_count/value_type`；补充`member_kind/error`。仅唯一逻辑实例返回值，支持组件、`UILogicInst`及旧Mono适配器 |
+| `member_probe` | 必填`root`、`component_type`、`members`，可选`max_nodes` | `nodes`逐对象返回`path/instance_id/component_type/active/members`；外层有`instance_count/count/truncated` |
+
+`component_type`可用完整类型名或短名，包含继承该类型的组件；优先完整名。`members`是1..32条点分隔路径，每条最多8层，例如`["UILogicInst.isUnlocked","UILogicInst.isClaimed"]`；配合现场确认的组件类型和面板/条目完整`root`，一次读取同阶段所需成员。只支持字段与非索引属性，不接受方法调用或下标表达式；集合数量可显式读取`Items.Count`。同名成员沿派生类到基类解析，最近一层唯一成员生效，同层歧义拒读。返回行数由`max_nodes`限制，默认1500、上限3000；限定root并设置满足本批的较小预算，截断时不据此证明全集。
+
+每个成员返回`found/readable/member_kind/value_type/value/error`。只有`found=true && readable=true`的值可进入业务判断；真实`0/false`保持原值，真实空值为`value=null,error=null`，缺失/异常/非基础类型为`readable=false,value=null,error=具体原因`，路径失败另有`failed_segment`。显式路径的中间对象只供取成员，最终仅返回基础JSON值（枚举/字符转文本）；不会自动展开对象、调用委托或补默认值。单字段实例数不为1、成员不可读或全零与界面矛盾时，先查定位/类型/来源，不据此判资源为0或前置受阻。
+
+`member_probe`返回的是组件数，不能当奖励数或全部业务项数。列表先核对`instance_count/count/truncated`、实际路径/逻辑类型及需要的成员是否可读，再按原ID/阶段/配置配对；缓存隐藏节点由`active`区分。缺一个可选成员不影响其他成员，但缺必需成员仍不能通过。比较路径例如`/nodes/0/members/UILogicInst.isUnlocked/value`，索引取当前实际结果；不要复用上轮数组索引。
 
 ### 固定按钮动作
 

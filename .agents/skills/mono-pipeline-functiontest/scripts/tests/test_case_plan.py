@@ -903,18 +903,19 @@ class PlanReferencePrecheckTests(unittest.TestCase):
 class BuiltinObservationTests(unittest.TestCase):
     """设备侧命名观测：宿主生成方法体，Agent 不写 C#；只返回业务事实，不返回成功/断言标记。"""
 
-    # 功能：四个已登记 op 都能生成非空方法体，且都不含自述成功字段；参数 self 为测试实例。
+    # 功能：已登记 op 都能生成非空方法体，且都不含自述成功字段；参数 self 为测试实例。
     def test_each_builtin_generates_body_without_verdict_fields(self) -> None:
         options: dict[str, JsonObject] = {
             "chain": {"depth": 2},
             "subtree": {"root": "UI_Root/Panel", "depth": 3},
             "buttons": {"name_contains": "btn"},
             "logic_field": {"logic_type": "HotFix.Example_Logic", "field": "_value"},
+            "member_probe": {"root": "UI_Root/Panel", "component_type": "Binder", "members": ["Logic.count"]},
         }
         for name, option in options.items():
             with self.subTest(name=name):
                 body: str = builtin_observation(name, option).decode("utf-8")
-                self.assertIn("__rows", body if name != "logic_field" else body + "__rows")
+                self.assertIn("__rows", body)
                 # 只返回业务事实：不得出现自述成功/断言/结论字段。
                 for forbidden in ("\"success\"", "\"assertion\"", "\"passed\"", "\"verdict\""):
                     self.assertNotIn(forbidden, body)
@@ -929,6 +930,21 @@ class BuiltinObservationTests(unittest.TestCase):
             builtin_observation("logic_field", {"logic_type": "T"})
         with self.assertRaises(InputError):
             builtin_observation("chain", {"depth": BUILTIN_MAX_DEPTH + 1})
+
+    # 功能：成员路径不接受表达式/重复/无界列表；参数 self 覆盖发送前预检。
+    def test_member_options_reject_invalid_paths_and_unscoped_scans(self) -> None:
+        base: JsonObject = {"root": "Root/UI", "component_type": "Binder", "members": ["Logic.count"]}
+        variants: list[JsonObject] = [
+            {**base, "root": ""}, {**base, "component_type": ""}, {**base, "members": []},
+            {**base, "members": ["Count", "Count"]}, {**base, "members": ["A"] * 33},
+            {**base, "members": ["A." * 8 + "A"]}, {**base, "members": "Count"},
+            {**base, "members": [12]}, {**base, "members": ["Call()"]},
+            {**base, "members": ["Items[0]"]}, {**base, "members": ["Logic..count"]},
+            {**base, "members": ["A" * 513]}, {**base, "field": "Count"},
+        ]
+        for options in variants:
+            with self.subTest(options=options), self.assertRaises(InputError):
+                builtin_observation("member_probe", options)
 
     # 功能：observe 请求 builtin 与 script 互斥，且真实走同一包装/观测链；参数 self 为测试实例。
     def test_observe_builtin_and_script_are_mutually_exclusive(self) -> None:

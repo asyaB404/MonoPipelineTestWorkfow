@@ -1,5 +1,5 @@
 """创建日期：2026-10-26；作者：Cyou。
-更新日期：2026-11-10；更新人：Codex；收窄交互步骤识别，避免只读业务名词阻断计划。
+更新日期：2026-11-12；更新人：Codex；统一字段/属性读取，显式区分缺值与真实零值。
 功能：持久逐条主动会话、合法前置/一次动作/新帧读取、原预期比较和唯一四状态 final。
 参数：完整用例、显式目标/权限、每次当前 Agent 的新请求；不包含模型服务或静态全集计划。
 """
@@ -31,9 +31,11 @@ CHAIN_SCHEMA = "mono-pipeline-chain/1"
 READ_PURPOSES = frozenset({"discovery", "precondition", "guard", "before", "after", "step", "logs"})
 # 设备侧命名观测 op：Agent 只传参数、不写 C#，一次调用取回结构化业务事实。
 # 边界：只返回业务事实，绝不返回 success/assertion/passed/verdict；不替代原预期比较或独立新帧门禁。
-BUILTIN_OBSERVATIONS: frozenset[str] = frozenset({"chain", "subtree", "buttons", "logic_field"})
+BUILTIN_OBSERVATIONS: frozenset[str] = frozenset({"chain", "subtree", "buttons", "logic_field", "member_probe"})
 BUILTIN_MAX_DEPTH = 6
 BUILTIN_MAX_NODES = 3000
+BUILTIN_MAX_MEMBERS = 32
+BUILTIN_MAX_MEMBER_DEPTH = 8
 OPERATIONS = frozenset({"attach", "status", "chain-start", "chain-end", "start-case", "observe", "action", "compare", "final", "attribute",
                         "baseline", "reference", "collect-evidence", "note", "close", "audit", "report"})
 # 计划静态自检不是会话操作：不写业务事件、不建连、不消耗命令 ID，只在本地复用同一套静态预检。
@@ -621,12 +623,144 @@ def planning_summary(parsed: list[tuple[str, str, list[tuple[str, JsonObject]]]]
             "cases": rows, "semantic_equivalence_proven": False}
 
 
+# 功能：生成共用成员读取体；参数 name/options 为旧单字段或组件多路径观察，header 提供节点路径函数。
+def builtin_member_observation(name: str, options: JsonObject, header: str) -> bytes:
+    root: str = cast(str, options.get("root", ""))
+    single: bool = name == "logic_field"
+    type_name: str = text(options.get("logic_type" if single else "component_type"), "builtin member type")
+    paths: JsonValue = [options.get("field")] if single else options.get("members")
+    if not single and not root.strip():
+        raise InputError("member_probe 必须给出 root，限定真实组件范围")
+    if not isinstance(paths, list) or not 1 <= len(paths) <= BUILTIN_MAX_MEMBERS:
+        raise InputError("builtin.members 必须为 1..32 条成员路径")
+    for path in paths:
+        if (not isinstance(path, str) or len(path) > 512 or
+                not 1 <= len(path.split(".")) <= BUILTIN_MAX_MEMBER_DEPTH or
+                any(not part.isidentifier() for part in path.split("."))):
+            raise InputError("成员路径只允许点分隔字段/属性名，至多8层，不接受调用或索引表达式")
+    if len(set(cast(list[str], paths))) != len(paths):
+        raise InputError("builtin.members 不得重复")
+    limit: int = integer(options.get("max_nodes", 1500), "builtin.max_nodes", 1, BUILTIN_MAX_NODES)
+    # 只执行明确点名的 getter；中间对象仅用于沿路径读取，返回前投影为基础 JSON 值。
+    reader: str = r'''
+System.Reflection.BindingFlags __flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+// Read a named field or property, preserving missing/read errors independently.
+System.Func<object,string,System.Collections.Generic.Dictionary<string,object>> __readMember = delegate(object __owner, string __name) {
+    System.Collections.Generic.Dictionary<string,object> __r = new System.Collections.Generic.Dictionary<string,object> {
+        {"found", false}, {"readable", false}, {"member_kind", null}, {"value_type", null}, {"value", null}, {"error", null} };
+    if (__owner == null || (__owner is UnityEngine.Object && (UnityEngine.Object)__owner == null)) { __r["error"] = "member_owner_missing"; return __r; }
+    try {
+        for (System.Type __type = __owner.GetType(); __type != null; __type = __type.BaseType) {
+            System.Reflection.MemberInfo[] __members = __type.GetMember(__name, System.Reflection.MemberTypes.Field | System.Reflection.MemberTypes.Property, __flags);
+            if (__members.Length == 0) { continue; }
+            __r["found"] = true;
+            if (__members.Length != 1) { __r["error"] = "member_ambiguous"; return __r; }
+            System.Reflection.FieldInfo __f = __members[0] as System.Reflection.FieldInfo;
+            System.Reflection.PropertyInfo __p = __members[0] as System.Reflection.PropertyInfo;
+            __r["member_kind"] = __f != null ? "field" : "property";
+            __r["value_type"] = __f != null ? __f.FieldType.FullName : (__p == null ? null : __p.PropertyType.FullName);
+            if (__f == null && (__p == null || __p.GetIndexParameters().Length != 0 || __p.GetGetMethod(true) == null)) {
+                __r["error"] = "member_not_readable"; return __r;
+            }
+            object __value = __f != null ? __f.GetValue(__owner) : __p.GetValue(__owner, null);
+            __r["readable"] = true; __r["value"] = __value;
+            if (__value != null) { __r["value_type"] = __value.GetType().FullName; }
+            return __r;
+        }
+        __r["error"] = "member_missing";
+    } catch (System.Exception) { __r["error"] = "member_read_failed"; }
+    return __r;
+};
+// Traverse only the requested path, then reject objects and non-finite numbers.
+System.Func<object,string,System.Collections.Generic.Dictionary<string,object>> __probeMember = delegate(object __owner, string __memberPath) {
+    System.Collections.Generic.Dictionary<string,object> __r = null;
+    foreach (string __part in __memberPath.Split('.')) {
+        __r = __readMember(__owner, __part);
+        if (!(bool)__r["readable"]) { __r["failed_segment"] = __part; break; }
+        __owner = __r["value"];
+    }
+    if (__r == null) { throw new System.InvalidOperationException("empty_member_path"); }
+    object __v = __r["value"];
+    if ((bool)__r["readable"] && __v != null) {
+        System.Type __type = __v.GetType();
+        System.TypeCode __code = System.Type.GetTypeCode(__type);
+        if (__type.IsEnum || __v is char) { __r["value"] = __v.ToString(); }
+        else if (__code == System.TypeCode.Object || __code == System.TypeCode.DateTime || __code == System.TypeCode.DBNull) {
+            __r["readable"] = false; __r["value"] = null; __r["error"] = "unsupported_value_type";
+        } else if ((__v is double && (double.IsNaN((double)__v) || double.IsInfinity((double)__v))) ||
+                   (__v is float && (float.IsNaN((float)__v) || float.IsInfinity((float)__v)))) {
+            __r["readable"] = false; __r["value"] = null; __r["error"] = "non_finite_value";
+        }
+    }
+    return __r;
+};
+'''
+    type_match: str = (
+        "System.Func<object,bool> __matches = delegate(object __candidate) {\n"
+        "    if (__candidate == null) { return false; }\n"
+        "    for (System.Type __type = __candidate.GetType(); __type != null; __type = __type.BaseType) {\n"
+        "        if (__type.FullName == " + json.dumps(type_name) + " || __type.Name == " + json.dumps(type_name) + ") { return true; }\n"
+        + ("        break;\n" if single else "") +
+        "    } return false;\n};\n"
+    )
+    adapter: str = r'''
+    if (!__matches(__candidate)) {
+        __candidate = __readMember(__component, "UILogicInst")["value"];
+        if (!__matches(__candidate)) {
+            object __adapter = __readMember(__component, "m_MonoInvocationAdapter")["value"];
+            __candidate = __readMember(__adapter, "m_Instance")["value"];
+        }
+    }
+''' if single else ""
+    scan: str = (
+        "System.Collections.Generic.List<object> __instances = new System.Collections.Generic.List<object>();\n"
+        "System.Collections.Generic.List<UnityEngine.Component> __components = new System.Collections.Generic.List<UnityEngine.Component>();\n"
+        "string __root = " + json.dumps(root) + ";\n"
+        "foreach (UnityEngine.Component __component in UnityEngine.Resources.FindObjectsOfTypeAll<UnityEngine.Component>()) {\n"
+        "    if (__component == null || __component.gameObject == null || !__component.gameObject.scene.IsValid()) { continue; }\n"
+        "    string __p = __path(__component.transform);\n"
+        "    if (__root.Length != 0 && __p != __root && !__p.StartsWith(__root + \"/\", System.StringComparison.Ordinal)) { continue; }\n"
+        "    object __candidate = __component;\n" + adapter +
+        "    if (!__matches(__candidate)) { continue; }\n"
+        + ("    if (__instances.Exists(delegate(object __prior) { return object.ReferenceEquals(__prior, __candidate); })) { continue; }\n" if single else "") +
+        "    __instances.Add(__candidate); __components.Add(__component);\n"
+        "}\n"
+    )
+    if single:
+        tail: str = (
+            "object __inst = __instances.Count == 1 ? __instances[0] : null;\n"
+            "System.Collections.Generic.Dictionary<string,object> __result = __probeMember(__inst, " + json.dumps(paths[0]) + ");\n"
+            "if (__inst == null) { __result[\"error\"] = __instances.Count == 0 ? \"instance_missing\" : \"instance_ambiguous\"; }\n"
+            "__result[\"logic_type\"] = " + json.dumps(type_name) + "; __result[\"field\"] = " + json.dumps(paths[0]) + ";\n"
+            "__result[\"instance_count\"] = __instances.Count;\n"
+            "return __result;\n"
+        )
+    else:
+        tail = (
+            "string[] __paths = new string[] { " + ", ".join(json.dumps(path) for path in paths) + " };\n"
+            "for (int __i = 0; __i < __instances.Count && __i < " + str(limit) + "; __i++) {\n"
+            "    UnityEngine.Component __component = __components[__i];\n"
+            "    System.Collections.Generic.Dictionary<string,object> __values = new System.Collections.Generic.Dictionary<string,object>();\n"
+            "    foreach (string __memberPath in __paths) { __values[__memberPath] = __probeMember(__instances[__i], __memberPath); }\n"
+            "    __rows.Add(new System.Collections.Generic.Dictionary<string,object> {\n"
+            "        {\"path\", __path(__component.transform)}, {\"active\", __component.gameObject.activeInHierarchy},\n"
+            "        {\"instance_id\", __component.GetInstanceID()}, {\"component_type\", __component.GetType().FullName}, {\"members\", __values} });\n"
+            "}\n"
+            "return new System.Collections.Generic.Dictionary<string,object> {\n"
+            "    {\"op\", \"member_probe\"}, {\"instance_count\", __instances.Count}, {\"count\", __rows.Count},\n"
+            "    {\"truncated\", __instances.Count > __rows.Count}, {\"nodes\", __rows} };\n"
+        )
+    return (header + reader + type_match + scan + tail).encode("utf-8")
+
+
 # 功能：生成设备侧命名观测脚本；参数 name 为已登记 op 名、options 为其参数，返回 C# 方法体字节。
 # 边界：只返回业务事实（层级/激活/文本/图片/开关/可交互/私有字段），绝不返回 success/assertion/passed/verdict。
 def builtin_observation(name: str, options: JsonObject) -> bytes:
     if name not in BUILTIN_OBSERVATIONS:
-        raise InputError("未知设备侧观测 op；只允许 chain/subtree/buttons/logic_field")
-    keys_only(options, {"depth", "max_nodes", "root", "name_contains", "logic_type", "field", "names_only"}, "builtin_options")
+        raise InputError("未知设备侧观测 op；只允许 chain/subtree/buttons/logic_field/member_probe")
+    allowed: set[str] = ({"root", "component_type", "members", "max_nodes"} if name == "member_probe" else
+        {"depth", "max_nodes", "root", "name_contains", "logic_type", "field", "names_only"})
+    keys_only(options, allowed, "builtin_options")
     names_only: JsonValue = options.get("names_only", False)
     if type(names_only) is not bool or (names_only and name not in {"chain", "subtree"}):
         raise InputError("names_only 仅为 chain/subtree 的布尔选项")
@@ -634,13 +768,11 @@ def builtin_observation(name: str, options: JsonObject) -> bytes:
     # 即第 6 层，因此默认 6 层以覆盖「不显式给 depth 也能拿到界面」的常见用法。
     depth: int = integer(options.get("depth", 6), "builtin.depth", 1, BUILTIN_MAX_DEPTH)
     limit: int = integer(options.get("max_nodes", 1500), "builtin.max_nodes", 1, BUILTIN_MAX_NODES)
-    for key in ("root", "name_contains", "logic_type", "field"):
+    for key in ("root", "name_contains", "logic_type", "field", "component_type"):
         if key in options and not isinstance(options[key], str):
             raise InputError("builtin." + key + " 必须为文本")
     root: str = cast(str, options.get("root", ""))
     node_name: str = cast(str, options.get("name_contains", ""))
-    logic_type: str = cast(str, options.get("logic_type", ""))
-    field: str = cast(str, options.get("field", ""))
     header: str = (
         "// 设备侧命名观测；只返回业务事实，不返回任何成功/断言标记。\n"
         "System.Collections.Generic.List<object> __rows = new System.Collections.Generic.List<object>();\n"
@@ -651,48 +783,8 @@ def builtin_observation(name: str, options: JsonObject) -> bytes:
         "    return p.Length == 0 ? t.name : p + \"/\" + t.name;\n"
         "};\n"
     )
-    if name == "logic_field":
-        if not logic_type or not field:
-            raise InputError("logic_field 必须给出 logic_type 与 field")
-        body: str = (
-            "System.Reflection.BindingFlags __flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;\n"
-            "System.Func<System.Type,string,System.Reflection.FieldInfo> __field = delegate(System.Type __type, string __name) {\n"
-            "    for (System.Type __parent = __type; __parent != null; __parent = __parent.BaseType) {\n"
-            "        System.Reflection.FieldInfo __member = __parent.GetField(__name, __flags);\n"
-            "        if (__member != null) { return __member; }\n"
-            "    } return null;\n"
-            "};\n"
-            "System.Collections.Generic.List<object> __instances = new System.Collections.Generic.List<object>();\n"
-            "System.Collections.Generic.HashSet<object> __seen = new System.Collections.Generic.HashSet<object>();\n"
-            "foreach (UnityEngine.Component __component in UnityEngine.Resources.FindObjectsOfTypeAll<UnityEngine.Component>()) {\n"
-            "    if (__component == null || !__component.gameObject.scene.IsValid()) { continue; }\n"
-            "    string __p = __path(__component.transform);\n"
-            "    string __root = " + json.dumps(root) + ";\n"
-            "    if (__root.Length != 0 && __p != __root && !__p.StartsWith(__root + \"/\", System.StringComparison.Ordinal)) { continue; }\n"
-            "    object __candidate = __component;\n"
-            "    if (__candidate.GetType().FullName != " + json.dumps(logic_type) + " && __candidate.GetType().Name != " + json.dumps(logic_type) + ") {\n"
-            "        System.Reflection.FieldInfo __adapterField = __field(__component.GetType(), \"m_MonoInvocationAdapter\");\n"
-            "        if (__adapterField == null) { continue; }\n"
-            "        object __adapter = __adapterField.GetValue(__component);\n"
-            "        if (__adapter == null) { continue; }\n"
-            "        System.Reflection.FieldInfo __instanceField = __field(__adapter.GetType(), \"m_Instance\");\n"
-            "        if (__instanceField == null) { continue; }\n"
-            "        __candidate = __instanceField.GetValue(__adapter);\n"
-            "    }\n"
-            "    if (__candidate == null || (__candidate.GetType().FullName != " + json.dumps(logic_type) + " && __candidate.GetType().Name != " + json.dumps(logic_type) + ") || !__seen.Add(__candidate)) { continue; }\n"
-            "    __instances.Add(__candidate);\n"
-            "}\n"
-            "object __inst = __instances.Count == 1 ? __instances[0] : null;\n"
-            "System.Reflection.FieldInfo __f = __inst == null ? null : __field(__inst.GetType(), " + json.dumps(field) + ");\n"
-            "object __v = __f == null ? null : __f.GetValue(__inst);\n"
-            "bool __scalar = __v != null && (__v is string || __v is bool || __v.GetType().IsPrimitive || __v is decimal || __v.GetType().IsEnum);\n"
-            "object __value = !__scalar ? null : __v.GetType().IsEnum ? __v.ToString() : __v;\n"
-            "return new System.Collections.Generic.Dictionary<string, object> {\n"
-            "    {\"logic_type\", " + json.dumps(logic_type) + "}, {\"field\", " + json.dumps(field) + "},\n"
-            "    {\"found\", __f != null}, {\"instance_count\", __instances.Count}, {\"readable\", __scalar}, {\"value\", __value},\n"
-            "    {\"value_type\", __v == null ? \"\" : __v.GetType().FullName} };\n"
-        )
-        return (header + body).encode("utf-8")
+    if name in {"logic_field", "member_probe"}:
+        return builtin_member_observation(name, options, header)
     # 场景遍历刻意不依赖 SceneManager 强类型：只用 FindObjectsOfTypeAll 取全部 Transform。
     # 必须无条件排除非场景对象（预制体资源、未实例化模板），否则同名资源根会被当成场景根，
     # 导致同一 UI 取到未激活的那一份、并产生重复 path。DontDestroyOnLoad 场景 scene.IsValid() 仍为 true，不受影响。
@@ -2277,7 +2369,7 @@ class Session:
         if builtin is not None:
             name: str = text(builtin, "builtin")
             if name not in BUILTIN_OBSERVATIONS:
-                raise InputError("未知设备侧观测 op；只允许 chain/subtree/buttons/logic_field")
+                raise InputError("未知设备侧观测 op；只允许 chain/subtree/buttons/logic_field/member_probe")
             if request.get("script") is not None:
                 raise InputError("设备侧命名观测与手写脚本不能同时出现")
             options: JsonObject = object_value(request.get("builtin_options", {}), "builtin_options")

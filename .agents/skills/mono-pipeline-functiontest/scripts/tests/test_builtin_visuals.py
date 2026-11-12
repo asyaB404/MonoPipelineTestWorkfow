@@ -349,6 +349,208 @@ public static class LoginFixture {
                 self.assertEqual(self.read_login_state(mode), {"login_page_state": "absent", "frame": 23})
 
 
+class BuiltinMemberTests(unittest.TestCase):
+    """Codex 2026-11-12: execute production reflection against isolated field/property shapes."""
+
+    compiler: Path
+
+    # Locate the installed compiler; cls never launches a game or installs dependencies.
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.compiler = fixture_compiler()
+
+    # Compile the real wrapped observation; options/mode select members and synthetic identities.
+    def read_members(self, operation: str, options: JsonObject, mode: str = "field") -> JsonObject:
+        body: bytes = builtin_observation(operation, options)
+        wrapper: str = wrap_script(body, "run-members", "R-1", "members", Limits(), SecretGuard()).decode("utf-8")
+        source: str = FIXTURE.split("public static class VisualFixture {")[0] + r'''
+public enum FixtureState { Ready, Pending }
+public class LogicBase {
+    private int inherited = 7;
+    private int ParentProperty { get { return 11; } }
+}
+public class FixtureLogic : LogicBase {
+    public bool isUnlocked = true;
+    public bool isClaimed { get { return false; } }
+    public int Zero { get { return 0; } }
+    public string Empty = null;
+    public object Nested = null;
+    public object Unsupported = new object();
+    public Func<int> Callback = delegate { throw new Exception("must not invoke"); };
+    public FixtureState State = FixtureState.Ready;
+    public double NotFinite = double.NaN;
+    public int Broken { get { throw new Exception("isolated getter failure"); } }
+    public int WriteOnly { set { throw new Exception("must not set"); } }
+    public int this[int index] { get { throw new Exception("must not index"); } }
+    // Simulate value-equal business objects; other is deliberately not an identity check.
+    public override bool Equals(object other) { return other is FixtureLogic; }
+    // All synthetic objects share a value hash to expose unsafe deduplication.
+    public override int GetHashCode() { return 1; }
+}
+public class BinderBase : UnityEngine.Component { public object UILogicInst; }
+public class FieldBinder : BinderBase { }
+public class PropertyBinder : UnityEngine.Component { public object UILogicInst { get; set; } }
+public class Adapter {
+    private object m_Instance;
+    // Store the synthetic instance in the legacy adapter field.
+    public Adapter(object instance) { m_Instance = instance; }
+}
+public class LegacyBinder : UnityEngine.Component {
+    private object m_MonoInvocationAdapter;
+    // Bind the synthetic instance through the old private adapter layout.
+    public LegacyBinder(object instance) { m_MonoInvocationAdapter = new Adapter(instance); }
+}
+public class NativeLogic : UnityEngine.Component { public int Count = 4; }
+public static class MemberFixture {
+    // Run the actual production wrapper and serialize only its projected result.
+    private static object Read() { /* MEMBER_BODY */ }
+    // Construct a selected UI subtree, a sibling decoy and optional duplicate instances.
+    public static int Main(string[] args) {
+        string mode = args[0];
+        UnityEngine.GameObject root = new UnityEngine.GameObject("Root");
+        UnityEngine.Resources.root = root.transform;
+        UnityEngine.GameObject ui = new UnityEngine.GameObject("UI");
+        ui.transform.parent = root.transform; root.transform.children.Add(ui.transform);
+        UnityEngine.GameObject decoy = new UnityEngine.GameObject("UIOther");
+        decoy.transform.parent = root.transform; root.transform.children.Add(decoy.transform);
+        decoy.Attach(new FieldBinder { UILogicInst = new FixtureLogic() });
+        object logic = mode == "null" ? null : new FixtureLogic();
+        if (mode == "property") { ui.Attach(new PropertyBinder { UILogicInst = logic }); }
+        else if (mode == "legacy") { ui.Attach(new LegacyBinder(logic)); }
+        else if (mode == "native") { ui.Attach(new NativeLogic()); }
+        else if (mode != "missing") { ui.Attach(new FieldBinder { UILogicInst = logic }); }
+        if (mode == "same" || mode == "multiple") {
+            ui.Attach(new FieldBinder { UILogicInst = mode == "same" ? logic : new FixtureLogic() });
+        }
+        if (mode == "inactive") { ui.activeInHierarchy = false; }
+        Console.Write(new JavaScriptSerializer().Serialize(Read()));
+        return 0;
+    }
+}
+'''
+        result: JsonObject = compile_fixture(self, self.compiler, source.replace("/* MEMBER_BODY */", wrapper), [mode])
+        self.assertIsNone(result["value_error"])
+        return cast(JsonObject, result["value"])
+
+    # Read one legacy-compatible value; field and mode identify the synthetic source.
+    def read_logic(self, field: str, mode: str = "field") -> JsonObject:
+        return self.read_members("logic_field", {"root": "Root/UI", "logic_type": "FixtureLogic", "field": field}, mode)
+
+    # Fields, properties, private base members and genuine false/zero remain distinct from missing values.
+    def test_logic_reads_fields_properties_and_inherited_members(self) -> None:
+        for field, expected, kind in (("isUnlocked", True, "field"), ("isClaimed", False, "property"),
+                                       ("Zero", 0, "property"), ("inherited", 7, "field"), ("ParentProperty", 11, "property")):
+            with self.subTest(field=field):
+                result: JsonObject = self.read_logic(field)
+                self.assertEqual(result["value"], expected)
+                self.assertEqual(result["member_kind"], kind)
+                self.assertEqual(result["instance_count"], 1)
+                self.assertTrue(result["found"])
+                self.assertTrue(result["readable"])
+                self.assertIsNone(result["error"])
+
+    # Both the current public binding and older adapter layout resolve without a game assembly reference.
+    def test_logic_supports_property_binding_legacy_adapter_and_native_component(self) -> None:
+        for mode in ("property", "legacy"):
+            with self.subTest(mode=mode):
+                self.assertTrue(self.read_logic("isUnlocked", mode)["value"])
+        native: JsonObject = self.read_members("logic_field", {"root": "Root/UI", "logic_type": "NativeLogic", "field": "Count"}, "native")
+        self.assertEqual(native["value"], 4)
+        probe: JsonObject = self.read_members("member_probe", {"root": "Root/UI", "component_type": "PropertyBinder",
+            "members": ["UILogicInst.Zero"]}, "property")
+        row: JsonObject = cast(list[JsonObject], probe["nodes"])[0]
+        self.assertEqual(cast(dict[str, JsonObject], row["members"])["UILogicInst.Zero"]["value"], 0)
+
+    # Value equality must not collapse distinct runtime instances; multiple bindings to one object may deduplicate.
+    def test_logic_distinguishes_missing_duplicate_and_shared_instances(self) -> None:
+        for mode, count, error in (("missing", 0, "instance_missing"), ("null", 0, "instance_missing"),
+                                    ("multiple", 2, "instance_ambiguous"), ("same", 1, None)):
+            with self.subTest(mode=mode):
+                result: JsonObject = self.read_logic("isUnlocked", mode)
+                self.assertEqual(result["instance_count"], count)
+                self.assertEqual(result["error"], error)
+                self.assertEqual(result["readable"], count == 1)
+                if count != 1:
+                    self.assertIsNone(result["value"])
+
+    # A missing path/getter is explicit; present null, enums and false keep their actual meanings.
+    def test_probe_projects_each_member_independently(self) -> None:
+        paths: list[str] = ["UILogicInst." + name for name in (
+            "isUnlocked", "isClaimed", "Zero", "Empty", "inherited", "ParentProperty", "Missing", "Broken",
+            "WriteOnly", "Item", "Unsupported", "Callback", "NotFinite", "State", "Nested.Count")]
+        result: JsonObject = self.read_members("member_probe", {"root": "Root/UI", "component_type": "BinderBase", "members": paths})
+        self.assertEqual(result["instance_count"], 1)
+        self.assertEqual(result["count"], 1)
+        self.assertFalse(result["truncated"])
+        row: JsonObject = cast(list[JsonObject], result["nodes"])[0]
+        self.assertEqual(row["path"], "Root/UI")
+        self.assertEqual(row["component_type"], "FieldBinder")
+        self.assertTrue(row["active"])
+        self.assertIsInstance(row["instance_id"], int)
+        members: dict[str, JsonObject] = cast(dict[str, JsonObject], row["members"])
+        for name, value in (("isUnlocked", True), ("isClaimed", False), ("Zero", 0), ("Empty", None),
+                             ("inherited", 7), ("ParentProperty", 11), ("State", "Ready")):
+            with self.subTest(name=name):
+                self.assertTrue(members["UILogicInst." + name]["readable"])
+                self.assertEqual(members["UILogicInst." + name]["value"], value)
+        for name, error, found in (("Missing", "member_missing", False), ("Broken", "member_read_failed", True),
+                                    ("WriteOnly", "member_not_readable", True), ("Item", "member_not_readable", True),
+                                    ("Unsupported", "unsupported_value_type", True), ("Callback", "unsupported_value_type", True),
+                                    ("NotFinite", "non_finite_value", True), ("Nested.Count", "member_owner_missing", False)):
+            with self.subTest(name=name):
+                member: JsonObject = members["UILogicInst." + name]
+                self.assertEqual(member["error"], error)
+                self.assertEqual(member["found"], found)
+                self.assertFalse(member["readable"])
+                self.assertIsNone(member["value"])
+        self.assertEqual(members["UILogicInst.Zero"]["value_type"], "System.Int32")
+        self.assertEqual(members["UILogicInst.Broken"]["member_kind"], "property")
+        self.assertEqual(members["UILogicInst.Nested.Count"]["failed_segment"], "Count")
+
+    # Count/truncation represent actual matched instances; hidden cached UI is explicitly marked.
+    def test_probe_counts_and_limits_without_default_empty_business_values(self) -> None:
+        options: JsonObject = {"root": "Root/UI", "component_type": "BinderBase", "members": ["UILogicInst.Zero"], "max_nodes": 1}
+        for mode, count, truncated in (("missing", 0, False), ("field", 1, False), ("multiple", 2, True)):
+            with self.subTest(mode=mode):
+                result: JsonObject = self.read_members("member_probe", options, mode)
+                self.assertEqual(result["instance_count"], count)
+                self.assertEqual(result["count"], min(count, 1))
+                self.assertEqual(result["truncated"], truncated)
+        inactive: JsonObject = self.read_members("member_probe", options, "inactive")
+        self.assertFalse(cast(list[JsonObject], inactive["nodes"])[0]["active"])
+
+    # Feed actual compiled observations into the host; missing values cannot become passes or product failures.
+    def test_generated_member_values_preserve_host_verdict_boundaries(self) -> None:
+        for field, valid, matched, status in (("Zero", True, True, "passed"), ("inherited", True, False, "failed"),
+                                              ("Missing", False, None, "test_inconclusive")):
+            with self.subTest(field=field):
+                actual: JsonObject = self.read_logic(field)
+                fixture: Fixture = Fixture(cases=[{"case_id": "R-1", "title": "读取业务数量", "preconditions": [],
+                    "steps": ["读取业务数量"], "expected": ["业务数量为0"]}])
+                self.addCleanup(fixture.cleanup)
+                fixture.world.override_read = True
+                fixture.world.returned_value = actual
+                with fixture.session() as session:
+                    session.invoke("attach", {})
+                    session.invoke("start-case", {"case_id": "R-1"})
+                    session.invoke("observe", {"command_id": "read-members", "observation_id": "members",
+                        "builtin": "logic_field", "builtin_options": {"root": "Root/UI", "logic_type": "FixtureLogic", "field": field},
+                        "scope": "step", "index": 1, "original_text": "读取业务数量", "purpose": "step", "covers_step": True,
+                        "target": fixture.world.target, "read_only_review": "隔离编译原字段读取，无业务副作用", "reason": "验证实际读取与判定边界"})
+                    result: JsonObject = session.invoke("compare", fixture.comparison("expected-zero", "members", "/value", 0, case_id="R-1"))
+                    self.assertEqual(result["valid"], valid)
+                    self.assertEqual(result["matched"], matched)
+                    self.assertEqual(result["status"], status)
+                    final: JsonObject = {"status": status}
+                    if status != "passed":
+                        final["reason"] = "真实反例" if valid else "成员缺失，不能证明数量为0"
+                    if not valid:
+                        final["category"] = "insufficient_observation"
+                    self.assertEqual(session.invoke("final", final)["status"], status)
+                    session.invoke("close", {})
+                    self.assertEqual(session.invoke("audit", {})["final_count"], 1)
+
+
 class WrapperValueTests(unittest.TestCase):
     """Codex: execute the real wrapper before any serializer sees unsupported objects."""
 

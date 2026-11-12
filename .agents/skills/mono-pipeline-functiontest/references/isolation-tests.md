@@ -30,7 +30,7 @@ py -3 -X utf8 -I -B scripts/cli.py delivery-verify
 | 共享准备和完成条件 | [test_chain_context.py](../scripts/tests/test_chain_context.py)、[test_preflight_completion.py](../scripts/tests/test_preflight_completion.py)：独立链路、完整声明/基线、稳定完成与失败锁存、未知动作停止 |
 | 会话及证据 | [tests](../scripts/tests/run_tests.py)：许可/身份、新帧、总预算、不重放、四状态、不可变来源、独占 writer/摘要链、关闭/计时/唯一报告 |
 | 自包含和语法 | [test_portable.py](../scripts/tests/test_portable.py)、[test_compatibility.py](../scripts/tests/test_compatibility.py)：8 模块、无导入副作用、阻断原工程的真实迁移、链接/模板、Python 3.10 文法 |
-| 生成C#与固定点击 | [test_builtin_visuals.py](../scripts/tests/test_builtin_visuals.py)：实际编译执行观测、返回投影和点击；验证原始视觉属性、委托/对象/预算拒绝、后代按钮、实例变化、交互状态和单次调用；仅自有控制台桩 |
+| 生成C#与固定点击 | [test_builtin_visuals.py](../scripts/tests/test_builtin_visuals.py)：实际编译执行观测、返回投影和点击；验证视觉属性、字段/属性/继承链、空值/异常/重复实例、多成员部分缺失、真实读取进入宿主判定、后代按钮及单次调用；仅自有控制台桩 |
 | 返回隔离与简洁输出 | [test_submission_repair.py](../scripts/tests/test_submission_repair.py)、[test_session.py](../scripts/tests/test_session.py)：可信只读错误隔离、下一例继续、动作/错误身份仍冻结、旧包装审计及CLI显示不改journal/退出码 |
 | 通用业务交互 | [test_flow_patterns.py](../scripts/tests/test_flow_patterns.py)：背包/设置必要交互、同路径/实例重复拒绝、结果反例、共享链路后合法准备及不放开未确认完成；现有计划格式和单JSON输出，不是实机业务验收 |
 | 交付和接入 | [test_delivery.py](../scripts/tests/test_delivery.py)、[test_gameclient_adapter.py](../scripts/tests/test_gameclient_adapter.py)：原依赖迁移、清单/ZIP、预算、原子发布、批准/备份、外部改动保护和可选适配边界 |
