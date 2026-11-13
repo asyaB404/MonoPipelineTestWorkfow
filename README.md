@@ -20,6 +20,8 @@
 
 ## 选择性部署
 
+按步骤接入技能、准备 Player、执行与收尾的说明见[Mono Pipeline 接入与操作说明](Doc/AI开发文档/MonoPipeline接入与操作说明.md)。
+
 1. 已有可用Mono测试包：复制Mono技能即可直接使用；需完整父流程时按原契约补齐公共技能。明确以`mono-pipeline-functiontest`承接PC执行，不因父文本提到编辑器而调用Unity MCP。父Workflow原文未修改，也没有把它伪装成自动识别Mono的新版入口；协作细则见[workflow-contract.md](.agents/skills/mono-pipeline-functiontest/references/workflow-contract.md)。
 2. 新项目需要首次接入：先对比公共`Assets`源码、GUID及各依赖；优先按Mono技能的`unity-preview`与批准后的`unity-apply`做文件级接入，或人工备份后选择性复制相同文件。不要同时重复接入，不覆盖目标`Packages/manifest.json`、锁文件、业务源码或既有配置。源码复制成功不代表已经完成Unity编译、原资源管线构建或Player验收。
 3. 同GameClient框架需要构建菜单：仓库已按工程路径提供菜单和6个框架依赖源码，共7个`.cs`及7个`.meta`；先按[编辑器依赖与迁移](Doc/AI开发文档/MonoPipeline编辑器依赖与迁移.md)核对目标并对比合并，再选择菜单文件。Skill内[四文件增量补丁](.agents/skills/mono-pipeline-functiontest/assets/adapters/GameClient/framework-overloads.patch)仍保留，但它不包含Mono资源生成和预加载守卫，不能只合并该补丁就视为完整迁移。框架其余实现、HybridCLR、SDK、资源和服务端仍由目标项目提供，不套用到其他框架。已有现包不因本次交付补全要求重打。
